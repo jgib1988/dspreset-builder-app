@@ -1,0 +1,387 @@
+body {
+  font-family: system-ui, sans-serif;
+  margin: 2rem;
+  color: #222;
+  background: #fff;
+}
+
+table {
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+
+th,
+td {
+  border: 1px solid #ccc;
+  padding: 0.3rem 0.6rem;
+  text-align: left;
+}
+
+th {
+  background: #f2f2f2;
+}
+
+td.number {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+td.problem {
+  color: #b00020;
+}
+
+td.muted {
+  color: #888;
+}
+
+#export-problems {
+  color: #b00020;
+}
+
+/* Warnings don't block the export. */
+#export-warnings {
+  color: #a35200;
+}
+
+#xml-preview {
+  border: 1px solid #ccc;
+  background: #f8f8f8;
+  padding: 0.6rem;
+  max-height: 24rem;
+  overflow: auto;
+}
+
+/* Mapping grid (SVG) */
+.grid {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+}
+
+.grid-bg {
+  fill: #fafafa;
+  stroke: #ccc;
+}
+
+.grid-line {
+  stroke: #e2e2e2;
+}
+
+.grid-label {
+  font-size: 15px;
+  fill: #666;
+}
+
+.key-white {
+  fill: #fff;
+  stroke: #ddd;
+}
+
+.key-black {
+  fill: #333;
+  stroke: #ddd;
+}
+
+.zone {
+  cursor: pointer;
+}
+
+.zone-body {
+  fill-opacity: 0.3;
+  stroke: #333;
+  stroke-opacity: 0.5;
+}
+
+.zone-root {
+  fill-opacity: 0.5;
+  pointer-events: none; /* clicks go to the zone body underneath */
+}
+
+.zone.selected .zone-body {
+  fill-opacity: 0.55;
+  stroke: #000;
+  stroke-opacity: 1;
+  stroke-width: 2;
+}
+
+.grid {
+  touch-action: none; /* let drags on touch screens move zones, not scroll the page */
+}
+
+.zone-body {
+  cursor: move;
+}
+
+.handle {
+  fill: transparent;
+}
+
+.handle-x {
+  cursor: ew-resize;
+}
+
+.handle-y {
+  cursor: ns-resize;
+}
+
+.root-input {
+  width: 4em;
+}
+
+.hint {
+  color: #666;
+  margin-top: 0;
+}
+
+/* Loop box */
+.loop-table {
+  margin-top: 0.3rem;
+}
+
+.frame-input {
+  width: 7em;
+}
+
+.frame-time {
+  color: #666;
+  font-size: 0.9em;
+}
+
+/* Envelope */
+.envelope-field {
+  margin-right: 1.2rem;
+  white-space: nowrap;
+}
+
+.envelope-input {
+  width: 5em;
+}
+
+/* Effects */
+.effects-list {
+  padding-left: 1.5rem;
+}
+
+.effect {
+  margin-bottom: 0.5rem;
+}
+
+.effect-field {
+  margin: 0 0.8rem;
+  white-space: nowrap;
+}
+
+.effect-input {
+  width: 6em;
+}
+
+.effect-button {
+  margin-left: 0.3rem;
+}
+
+/* Controls */
+.controls-table td {
+  border: none;
+  padding: 0.2rem 0.5rem 0.2rem 0;
+}
+
+.control-label {
+  width: 8em;
+}
+
+.control-input {
+  width: 5em;
+}
+
+.ui-preview {
+  display: block;
+  width: 100%;
+  max-width: 812px;
+  height: auto;
+  border: 1px solid #ccc;
+}
+
+.preview-panel {
+  fill: #333;
+  stroke: #555;
+}
+
+.preview-control {
+  fill: #666;
+  stroke: #999;
+}
+
+.preview-title {
+  fill: #fff;
+  font-size: 14px;
+}
+
+.preview-label {
+  fill: #fff;
+  font-size: 11px;
+  text-anchor: middle;
+}
+
+.preview-warning {
+  fill: #ff6b6b;
+  font-size: 16px;
+  text-anchor: middle;
+}
+
+.ui-preview {
+  touch-action: none; /* let drags on touch screens move panels, not scroll */
+}
+
+.preview-panel-group {
+  cursor: move;
+}
+
+.preview-overlap {
+  stroke: #ff4d4d;
+  stroke-width: 2;
+}
+
+/* Zones that overlap another zone (validate.js) */
+.zone.overlap .zone-body {
+  stroke: #e67e00;
+  stroke-opacity: 1;
+  stroke-width: 3;
+}
+
+/* Waveform (Trim and loop box) */
+.waveform {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+  touch-action: none;
+}
+
+.wave-bg {
+  fill: #fafafa;
+  stroke: #ccc;
+}
+
+.wave-line {
+  stroke: #4e79a7;
+  stroke-width: 1;
+}
+
+.wave-divider,
+.wave-tick {
+  stroke: #ccc;
+}
+
+.wave-zero {
+  stroke: #e2e2e2;
+}
+
+/* Zoomed in: a line through the frame values, with a dot per frame. */
+.wave-trace {
+  fill: none;
+  stroke: #4e79a7;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke; /* same thickness however wide the page */
+}
+
+.wave-dot {
+  fill: #4e79a7;
+}
+
+.wave-toolbar {
+  margin-bottom: 6px;
+  font-size: 0.9em;
+  color: #555;
+}
+
+.wave-toolbar button {
+  margin-right: 4px;
+}
+
+/* Which part of the file is in view. */
+.wave-overview {
+  position: relative;
+  height: 6px;
+  margin-top: 4px;
+  background: #e6e6e6;
+}
+
+.wave-overview-view {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: #4e79a7;
+}
+
+.wave-label {
+  font-size: 14px;
+  fill: #666;
+}
+
+.wave-trimmed {
+  fill: #000;
+  fill-opacity: 0.25;
+}
+
+.wave-loop {
+  fill: #59a14f;
+  fill-opacity: 0.18;
+}
+
+.wave-crossfade {
+  fill: #59a14f;
+  fill-opacity: 0.08;
+}
+
+.wave-marker {
+  cursor: ew-resize;
+}
+
+.wave-marker-line {
+  stroke-width: 2;
+}
+
+.wave-marker-trim .wave-marker-line {
+  stroke: #333;
+}
+
+.wave-marker-loop .wave-marker-line {
+  stroke: #2e7d32;
+}
+
+.wave-marker-hit {
+  fill: transparent;
+}
+
+.loop-row {
+  cursor: pointer;
+}
+
+.loop-row.shown {
+  background: #eef3fa;
+}
+
+/* Checkboxes, dropdowns and radio buttons side by side (Release samples,
+   Choke groups) and the grid's Key down / Key up picker */
+.inline-option {
+  margin-right: 16px;
+}
+
+.grid-kind {
+  margin: 0 0 6px;
+}
+
+/* How to use box at the top of the page */
+#instructions {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 0.5rem 1rem;
+  margin-bottom: 1rem;
+  max-width: 50rem;
+}
+
+#instructions summary {
+  cursor: pointer;
+  font-weight: bold;
+}

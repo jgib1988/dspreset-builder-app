@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Decent Sampler Preset Builder</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="src/main.js"></script>
+</head>
+<body>
+  <h1>Decent Sampler Preset Builder</h1>
+  <!-- "open" makes the box start expanded; clicking the heading folds it away. -->
+  <details id="instructions" open>
+    <summary>How to use</summary>
+    <p>
+      This page builds a <a href="https://www.decentsamples.com/">Decent Sampler</a>
+      preset (.dspreset) from a folder of WAV samples. Your audio stays on your
+      computer: it is read in your browser and never uploaded. Only the preset file is saved.
+    </p>
+    <p>
+      <strong>Name your samples</strong> <code>Name_Note_vN_rrN.wav</code>, e.g. <code>Piano_C3_v1_rr1.wav</code>.
+      The note is a name (C3, F#2, Bb1) or a MIDI number (0–127), with <strong>middle C = C3 (MIDI 60)</strong>.
+      <code>v</code> is the velocity layer and <code>rr</code> the round-robin, each counted from 1.
+      Files that don't match are flagged and left out.
+    </p>
+    <ol>
+      <li>Click <strong>Pick sample folder</strong> and choose the folder your samples are in.</li>
+      <li>Check the file table and the mapping grid.</li>
+      <li>Optionally set the envelope, effects, modulators and plugin controls.</li>
+      <li>Click <strong>Export .dspreset</strong>. It downloads (usually to your Downloads folder).</li>
+      <li>Move the .dspreset <strong>into the same folder as the samples</strong>, then open it in Decent Sampler.</li>
+    </ol>
+    <ul>
+      <li>Presets need <strong>Decent Sampler 1.34.0 or later</strong>. Some effects, such as the filter types, behave differently in older versions.</li>
+      <li><strong>Chrome or Edge</strong> give the best folder picker. Other browsers work too, but the folder dialog looks different.</li>
+      <li><strong>Save project</strong> keeps your work as a .json file. To carry on later, load it, then pick the sample folder again.</li>
+    </ul>
+  </details>
+  <button id="pick-folder">Pick sample folder</button>
+  <button id="save-project" disabled>Save project</button>
+  <button id="load-project">Load project</button>
+  <!-- Hidden file picker, opened by the Load project button. -->
+  <input id="load-project-file" type="file" accept=".json,application/json" hidden>
+  <p class="hint">You can also drop a .dsproject.json file anywhere on this page to load it.</p>
+  <p id="summary"></p>
+
+  <section id="mapping-section" hidden>
+    <h2>Mapping</h2>
+    <p class="hint">
+      Drag a zone to move it, or drag its edges to resize it.
+      Re-picking the folder keeps the mapping and loops of files that are still there.
+    </p>
+    <p><button id="reset-mapping">Reset mapping</button></p>
+    <div id="grid"></div>
+    <div id="zone-details"></div>
+  </section>
+
+  <section id="release-section" hidden>
+    <h2>Release samples</h2>
+    <p class="hint">
+      Tick the sample names that should play when a key is released (e.g. a piano's damper sound).
+      They get their own mapping: pick "Key up" above the grid to see and edit it.
+    </p>
+    <div id="release"></div>
+  </section>
+
+  <section id="keyswitch-section" hidden>
+    <h2>Key switches</h2>
+    <p class="hint">
+      Give sample names an articulation, then pick a key for each articulation: pressing that key
+      switches to it (the key itself doesn't play). Each articulation gets its own mapping: pick it above the grid.
+    </p>
+    <div id="keyswitch"></div>
+  </section>
+
+  <section id="choke-section" hidden>
+    <h2>Choke groups</h2>
+    <p class="hint">
+      Samples in the same choke group cut each other off, e.g. a closed hi-hat stops an open one.
+      A sound also cuts off its own previous hit.
+    </p>
+    <div id="choke"></div>
+  </section>
+
+  <section id="global-section" hidden>
+    <h2>Global</h2>
+    <div id="global"></div>
+  </section>
+
+  <section id="envelope-section" hidden>
+    <h2>Amp envelope</h2>
+    <div id="envelope"></div>
+  </section>
+
+  <section id="effects-section" hidden>
+    <h2>Effects</h2>
+    <div id="effects"></div>
+  </section>
+
+  <section id="modulators-section" hidden>
+    <h2>Modulators</h2>
+    <div id="modulators"></div>
+  </section>
+
+  <section id="controls-section" hidden>
+    <h2>Controls</h2>
+    <div id="controls"></div>
+  </section>
+  <table id="file-table">
+    <thead>
+      <tr>
+        <th>Path</th>
+        <th>Name</th>
+        <th>Note</th>
+        <th>Vel layer</th>
+        <th>RR</th>
+        <th>Size</th>
+        <th>Sample rate</th>
+        <th>Channels</th>
+        <th>Bit depth</th>
+        <th>Length (frames)</th>
+        <th>Duration</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <section id="export-section" hidden>
+    <h2>Export</h2>
+    <p id="export-summary"></p>
+    <p id="rr-mode-row" hidden>
+      <label>
+        Round-robin mode:
+        <select id="rr-mode">
+          <option value="round_robin">round_robin (in order)</option>
+          <option value="random">random (never the same twice in a row)</option>
+          <option value="true_random">true_random (fully random)</option>
+        </select>
+      </label>
+    </p>
+    <ul id="export-warnings"></ul>
+    <ul id="export-problems"></ul>
+    <button id="export-button">Export .dspreset</button>
+    <p>Put the downloaded file in your instrument folder, then open it in Decent Sampler.</p>
+    <pre id="xml-preview"></pre>
+  </section>
+</body>
+</html>

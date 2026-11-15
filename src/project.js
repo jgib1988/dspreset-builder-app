@@ -95,6 +95,9 @@ export function createProject(folderName) {
     // is on when the preset loads.
     articulations: {},
     keyswitches: {},
+    // Each articulation's starting volume, 0–1, by number, e.g. { 2: 0.5 }
+    // (docs: volume on <tag>). Missing means 1, which isn't written.
+    articulationVolumes: {},
     // Mix layers by sample name, e.g. { Close: 1, Room: 2 }: they play together
     // on the same keys, and each is exported with tags="mixN" so a volume knob
     // can set its level (docs: TAG_VOLUME). Names without one have no tag.

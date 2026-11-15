@@ -34,7 +34,7 @@
 // their layer, so the voice limit can't go on that). With a Mono/Poly button
 // the tags are always written; the button sets TAG_POLYPHONY to 1 or -1.
 
-import { articulationOf, getZones, isExportable, isRelease, mixLayerOf, mixLayerVolume, usedArticulations, usedMixLayers } from './mapping.js';
+import { articulationOf, articulationVolume, getZones, isExportable, isRelease, mixLayerOf, mixLayerVolume, usedArticulations, usedMixLayers } from './mapping.js';
 import { midiToNoteName } from './filename.js';
 import { CURVE_DEFAULTS } from './project.js';
 import { EFFECT_KINDS, NOTE_EFFECTS_TAG, effectTypes, isImpulseResponseFile, visibleParams } from './effects.js';
@@ -60,7 +60,14 @@ export function buildPresetXml(project) {
   const mixLayers = usedMixLayers(project);
   // Tags that don't start with the defaults (enabled, volume 1, no voice limit).
   const tagLines = [
-    ...articulations.slice(1).map((articulation) => `    <tag name="art${articulation}" enabled="false"/>`),
+    // Articulations after the first start off; any can start at a lower volume.
+    ...articulations
+      .map((articulation, index) => {
+        const volume = articulationVolume(project, articulation);
+        const attributes = (index > 0 ? ' enabled="false"' : '') + (volume !== 1 ? ` volume="${volume}"` : '');
+        return attributes ? `    <tag name="art${articulation}"${attributes}/>` : null;
+      })
+      .filter(Boolean),
     ...mixLayers
       .filter((mixLayer) => mixLayerVolume(project, mixLayer) !== 1)
       .map((mixLayer) => `    <tag name="mix${mixLayer}" volume="${mixLayerVolume(project, mixLayer)}"/>`),
@@ -612,6 +619,7 @@ export function checkPreset(project, xml) {
   }
   problems.push(...checkKeyswitches(project));
   problems.push(...checkMixLayerVolumes(project));
+  problems.push(...checkArticulationVolumes(project));
   problems.push(...checkVoiceLimits(project));
   problems.push(...checkSequences(project));
   problems.push(...checkArpeggiator(project));
@@ -830,6 +838,15 @@ function checkMixLayerVolumes(project) {
       return !Number.isFinite(volume) || volume < 0 || volume > 1;
     })
     .map((mixLayer) => `Mix layer ${mixLayer} volume must be a number from 0 to 1`);
+}
+
+function checkArticulationVolumes(project) {
+  return usedArticulations(project)
+    .filter((articulation) => {
+      const volume = articulationVolume(project, articulation);
+      return !Number.isFinite(volume) || volume < 0 || volume > 1;
+    })
+    .map((articulation) => `Articulation ${articulation} volume must be a number from 0 to 1`);
 }
 
 function checkKeyswitches(project) {

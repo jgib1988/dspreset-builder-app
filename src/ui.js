@@ -13,7 +13,7 @@
 // sequence (Play button, Rate).
 
 import { EFFECT_BINDINGS, EFFECT_KINDS, NOTE_EFFECTS_TAG, visibleParams } from './effects.js';
-import { articulationLabel, mixLayerLabel, mixLayerVolume, usedArticulations, usedMixLayers } from './mapping.js';
+import { articulationLabel, articulationVolume, mixLayerLabel, mixLayerVolume, usedArticulations, usedMixLayers } from './mapping.js';
 import { MODULATOR_BINDINGS, MODULATOR_KINDS, visibleFields } from './modulators.js';
 import { ARP_NUMBERS, ARP_ORDERS } from './arpeggiator.js';
 
@@ -107,7 +107,7 @@ const arpKnobKey = (setting) => `arp${setting[0].toUpperCase()}${setting.slice(1
 const ARP_BINDING = 'type="arpeggiator" level="instrument"';
 function sectionKey({ effectId, key }) {
   if (effectId !== null) return effectId;
-  if (key === 'articulation') return 'articulation';
+  if (key === 'articulation' || articulationNumber(key) !== null) return 'articulation';
   if (key === 'glideMode' || key === 'monophonic') return 'glide';
   if (key === 'sequenceMenu') return 'sequences';
   if (key.startsWith('arp')) return 'arpeggiator';
@@ -135,6 +135,13 @@ const MENU = { width: 160, height: 26 };
 const SNAP = 8; // dragged panels snap to this grid
 // A panel with a menu and knobs (e.g. Arpeggiator) is taller: menu, then knobs.
 const MENU_ROW = MENU.height + GAP;
+
+// An articulation volume control's key is 'art' and its number, e.g. 'art2'.
+// Returns the number, or null for other keys.
+function articulationNumber(key) {
+  const match = /^art(\d+)$/.exec(key);
+  return match ? Number(match[1]) : null;
+}
 
 // A mix layer volume control's key is 'mix' and the layer number, e.g.
 // 'mix2'. Returns the number, or null for other keys.
@@ -289,6 +296,27 @@ export function resolveTarget(project, { effectId, key }) {
       applies: true,
     };
   }
+  // An articulation's volume (docs: TAG_VOLUME on its artN tag, 0–1; tested
+  // with key switching). Only there while the articulation has samples.
+  const articulation = effectId === null ? articulationNumber(key) : null;
+  if (articulation !== null) {
+    if (!usedArticulations(project).includes(articulation)) return null;
+    return {
+      key,
+      label: articulationLabel(project, articulation),
+      order: articulation,
+      sectionTitle: SECTION_TITLES.articulation,
+      value: articulationVolume(project, articulation),
+      bindingTarget: `type="amp" level="tag" identifier="${key}"`,
+      parameter: 'TAG_VOLUME',
+      range: [0, 1],
+      valid: [0, 1],
+      needsEnvelope: false,
+      needsValue: null,
+      applies: true,
+      integer: false,
+    };
+  }
   // A mix layer's volume (docs: TAG_VOLUME, 0–1). Only there while the
   // layer has samples.
   const mixLayer = effectId === null ? mixLayerNumber(key) : null;
@@ -420,8 +448,12 @@ function availableTargets(project) {
     },
     { title: SECTION_TITLES.amp, effectId: null, options: options('amp') },
   ];
-  if (usedArticulations(project).length >= 2) {
-    groups.push({ title: SECTION_TITLES.articulation, effectId: null, options: [{ key: 'articulation', label: 'Menu' }] });
+  const articulations = usedArticulations(project);
+  if (articulations.length > 0) {
+    const options = articulations.map((n) => ({ key: `art${n}`, label: `Articulation ${n} volume (${articulationLabel(project, n)})` }));
+    // The menu needs two articulations to choose between.
+    if (articulations.length >= 2) options.unshift({ key: 'articulation', label: 'Menu' });
+    groups.push({ title: SECTION_TITLES.articulation, effectId: null, options });
   }
   const mixLayers = usedMixLayers(project);
   if (mixLayers.length > 0) {
@@ -751,6 +783,15 @@ export function addEffectControls(project, effect) {
 
 export function removeArticulationMenu(project) {
   project.ui.controls = project.ui.controls.filter((c) => c.key !== 'articulation');
+}
+
+// Removes the volume controls of articulations no longer in use.
+export function removeUnusedArticulationVolumes(project) {
+  const used = usedArticulations(project);
+  project.ui.controls = project.ui.controls.filter((c) => {
+    const articulation = c.effectId === null ? articulationNumber(c.key) : null;
+    return articulation === null || used.includes(articulation);
+  });
 }
 
 // Adds a volume control for each mix layer in use that has none, and removes

@@ -3,8 +3,8 @@
 // element", TAG_ENABLED). Checks on the values happen in export.js
 // (checkPreset) and validate.js (keyswitch inside a zone).
 
-import { isExportable, remapName, usedArticulations } from './mapping.js';
-import { addControl, removeArticulationMenu } from './ui.js';
+import { articulationVolume, isExportable, remapName, usedArticulations } from './mapping.js';
+import { addControl, removeArticulationMenu, removeUnusedArticulationVolumes } from './ui.js';
 import { midiToNoteName } from './filename.js';
 
 const FIRST_SUGGESTED_KEYSWITCH = 24; // C0; articulation 2 gets C#0, and so on
@@ -42,6 +42,11 @@ export function renderKeyswitchEditor(container, project, onMappingChange, onCha
       const after = usedArticulations(project).length;
       if (before < 2 && after >= 2) addControl(project, null, 'articulation');
       if (after < 2) removeArticulationMenu(project);
+      // An articulation no longer in use forgets its volume and loses its knob.
+      for (const key of Object.keys(project.articulationVolumes)) {
+        if (!usedArticulations(project).includes(Number(key))) delete project.articulationVolumes[key];
+      }
+      removeUnusedArticulationVolumes(project);
       onMappingChange();
     });
     label.append(`${name} `, select);
@@ -79,8 +84,25 @@ export function renderKeyswitchEditor(container, project, onMappingChange, onCha
       noteName,
       articulation === articulations[0] ? ' (on when the preset loads)' : '',
     );
+
+    // Starting volume (docs: volume on <tag>; tested with key switching).
+    const volume = document.createElement('input');
+    volume.type = 'number';
+    volume.min = 0;
+    volume.max = 1;
+    volume.step = 0.05;
+    volume.className = 'envelope-input';
+    volume.value = articulationVolume(project, articulation) ?? '';
+    volume.addEventListener('input', () => {
+      project.articulationVolumes[articulation] = volume.value === '' ? null : Number(volume.value);
+      onChange();
+    });
+    const volumeLabel = document.createElement('label');
+    volumeLabel.className = 'effect-field';
+    volumeLabel.append('volume ', volume, ' (0–1, its volume knob starts here)');
+
     const row = document.createElement('p');
-    row.append(label);
+    row.append(label, volumeLabel);
     return row;
   });
 

@@ -31,6 +31,12 @@ export function articulationLabel(project, articulation) {
   return [...new Set(names)].sort().join(' / ');
 }
 
+// An articulation's starting volume, 0–1 (null while its box is blank).
+export function articulationVolume(project, articulation) {
+  const volume = project.articulationVolumes?.[articulation];
+  return volume === undefined ? 1 : volume;
+}
+
 // The sample's mix layer number, or 0 for none. Mix layers play together on
 // the same keys (e.g. close and room mics), each with its own volume.
 export function mixLayerOf(project, sample) {

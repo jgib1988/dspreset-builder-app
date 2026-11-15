@@ -9,11 +9,13 @@
 // source of truth. Controls are placed automatically (layoutControls):
 // Global, Glide, Amp envelope, Articulation and Mixer panels first, then one panel
 // per effect in chain order, one per per-note effect, one per modulator, then
-// the Sequences panel (Play menu) and one panel per sequence (Play button, Rate).
+// the Arpeggiator panel, the Sequences panel (Play menu) and one panel per
+// sequence (Play button, Rate).
 
 import { EFFECT_BINDINGS, EFFECT_KINDS, NOTE_EFFECTS_TAG, visibleParams } from './effects.js';
 import { articulationLabel, mixLayerLabel, mixLayerVolume, usedArticulations, usedMixLayers } from './mapping.js';
 import { MODULATOR_BINDINGS, MODULATOR_KINDS, visibleFields } from './modulators.js';
+import { ARP_NUMBERS, ARP_ORDERS } from './arpeggiator.js';
 
 // The docs' recommended window size.
 export const UI_WIDTH = 812;
@@ -87,13 +89,28 @@ const SECTION_TITLES = {
   amp: 'Amp envelope',
   articulation: 'Articulation',
   mixer: 'Mixer',
+  arpeggiator: 'Arpeggiator',
   sequences: 'Sequences',
 };
+
+// Arpeggiator knobs (docs: arpeggiator tutorial; tested in the plugin), by
+// the setting's key in project.arpeggiator: a new knob's range, and the
+// binding parameter. The key's 'arp' prefix keeps them apart from others.
+const ARP_KNOBS = {
+  octaveRange: { label: 'Octaves', parameter: 'ARP_OCTAVE_RANGE', range: [1, 4] },
+  stepCount: { label: 'Steps', parameter: 'ARP_STEP_COUNT', range: [1, 16] },
+  gateLength: { label: 'Gate', parameter: 'ARP_GATE_LENGTH', range: [0.05, 1.5] },
+  rateMultiplier: { label: 'Rate x', parameter: 'ARP_RATE_MULTIPLIER', range: [0.25, 4] },
+  overrideBpm: { label: 'BPM', parameter: 'ARP_OVERRIDE_BPM', range: [30, 300] },
+};
+const arpKnobKey = (setting) => `arp${setting[0].toUpperCase()}${setting.slice(1)}`;
+const ARP_BINDING = 'type="arpeggiator" level="instrument"';
 function sectionKey({ effectId, key }) {
   if (effectId !== null) return effectId;
   if (key === 'articulation') return 'articulation';
   if (key === 'glideMode' || key === 'monophonic') return 'glide';
   if (key === 'sequenceMenu') return 'sequences';
+  if (key.startsWith('arp')) return 'arpeggiator';
   if (mixLayerNumber(key) !== null) return 'mixer';
   return key in INSTRUMENT_SETTINGS ? 'global' : 'amp';
 }
@@ -116,6 +133,8 @@ const PANEL_HEIGHT = PAD + TITLE_HEIGHT + ROW_HEIGHT + PAD;
 const BUTTON = { width: 50, height: 18 };
 const MENU = { width: 160, height: 26 };
 const SNAP = 8; // dragged panels snap to this grid
+// A panel with a menu and knobs (e.g. Arpeggiator) is taller: menu, then knobs.
+const MENU_ROW = MENU.height + GAP;
 
 // A mix layer volume control's key is 'mix' and the layer number, e.g.
 // 'mix2'. Returns the number, or null for other keys.
@@ -167,6 +186,8 @@ export function resolveTarget(project, { effectId, key }) {
       order: 0,
       sectionTitle: SECTION_TITLES.glide,
       value: project.glideMode,
+      bindingTarget: 'type="amp" level="instrument" position="0"',
+      parameter: 'GLIDE_MODE',
       options: [
         { name: 'Legato', value: 'legato' },
         { name: 'Always', value: 'always' },
@@ -187,6 +208,32 @@ export function resolveTarget(project, { effectId, key }) {
       needsEnvelope: false,
       needsValue: null,
       applies: true,
+    };
+  }
+  // The Arpeggiator panel: an On/Off button, the Order menu and knobs. Only
+  // there while the preset includes an arpeggiator.
+  if (effectId === null && key.startsWith('arp')) {
+    if (!project.arpeggiator.included) return null;
+    const arp = project.arpeggiator;
+    const common = { sectionTitle: SECTION_TITLES.arpeggiator, bindingTarget: ARP_BINDING, needsEnvelope: false, needsValue: null, applies: true };
+    if (key === 'arpEnabled') return { ...common, key, label: 'On/off', parameter: 'ARP_ENABLED', order: -1, value: arp.enabled };
+    if (key === 'arpOrder') {
+      return { ...common, key, label: 'Order', parameter: 'ARP_ORDER', order: 0, value: arp.order, options: ARP_ORDERS.map(([value, name]) => ({ name, value })) };
+    }
+    const settings = Object.keys(ARP_KNOBS);
+    const setting = settings.find((s) => arpKnobKey(s) === key);
+    if (!setting) return null;
+    const { min, max, integer } = ARP_NUMBERS.find((n) => n.key === setting);
+    return {
+      ...common,
+      key,
+      label: ARP_KNOBS[setting].label,
+      parameter: ARP_KNOBS[setting].parameter,
+      order: settings.indexOf(setting),
+      value: arp[setting],
+      range: ARP_KNOBS[setting].range,
+      valid: [min, max],
+      integer: Boolean(integer),
     };
   }
   // The sequence Play menu: Off, then one option per sequence (docs: note
@@ -401,6 +448,14 @@ function availableTargets(project) {
     }
     groups.push({ title: `${definition.label} (${modulator.id})`, effectId: modulator.id, options });
   }
+  if (project.arpeggiator.included) {
+    const options = [
+      { key: 'arpEnabled', label: 'On/off button' },
+      { key: 'arpOrder', label: 'Order menu' },
+      ...Object.entries(ARP_KNOBS).map(([setting, { label }]) => ({ key: arpKnobKey(setting), label })),
+    ];
+    groups.push({ title: SECTION_TITLES.arpeggiator, effectId: null, options });
+  }
   if (project.sequences.length > 0) {
     groups.push({ title: SECTION_TITLES.sequences, effectId: null, options: [{ key: 'sequenceMenu', label: 'Play menu (Off / each sequence)' }] });
   }
@@ -425,6 +480,7 @@ export function layoutControls(project) {
   const sections = [
     'global', 'glide', 'amp', 'articulation', 'mixer',
     ...owners.map((o) => o.id),
+    'arpeggiator',
     'sequences',
     ...project.sequences.map((s) => s.id),
   ];
@@ -442,7 +498,8 @@ export function layoutControls(project) {
     const knobsWidth = knobs.reduce((sum, c) => sum + CONTROL_STYLES[c.style].width, 0) + GAP * Math.max(knobs.length - 1, 0);
     const titleWidth = title.length * 8 + (button ? BUTTON.width + GAP : 0);
     const width = PAD * 2 + Math.max(knobsWidth, titleWidth, menu ? MENU.width : 0);
-    specs.push({ key: section, title, button, menu, knobs, width });
+    const height = PANEL_HEIGHT + (menu && knobs.length > 0 ? MENU_ROW : 0);
+    specs.push({ key: section, title, button, menu, knobs, width, height });
   }
 
   // Then where each panel goes.
@@ -450,27 +507,31 @@ export function layoutControls(project) {
   const where = new Map();
   if (positions === null) {
     // Left to right, wrapping to a new row when a panel doesn't fit.
+    // A row is as tall as its tallest panel.
     let x = MARGIN;
     let y = MARGIN;
+    let rowHeight = 0;
     for (const spec of specs) {
       if (x > MARGIN && x + spec.width > UI_WIDTH - MARGIN) {
         x = MARGIN;
-        y += PANEL_HEIGHT + MARGIN;
+        y += rowHeight + MARGIN;
+        rowHeight = 0;
       }
       where.set(spec, { x, y });
       x += spec.width + MARGIN;
+      rowHeight = Math.max(rowHeight, spec.height);
     }
   } else {
     // Saved positions first, then new panels into the space left over.
     const placed = [];
     for (const spec of specs.filter((s) => positions[s.key])) {
       where.set(spec, positions[spec.key]);
-      placed.push({ ...positions[spec.key], width: spec.width, height: PANEL_HEIGHT });
+      placed.push({ ...positions[spec.key], width: spec.width, height: spec.height });
     }
     for (const spec of specs.filter((s) => !positions[s.key])) {
-      const spot = findFreeSpace(placed, spec.width) ?? { x: MARGIN, y: MARGIN };
+      const spot = findFreeSpace(placed, spec.width, spec.height) ?? { x: MARGIN, y: MARGIN };
       where.set(spec, spot);
-      placed.push({ ...spot, width: spec.width, height: PANEL_HEIGHT });
+      placed.push({ ...spot, width: spec.width, height: spec.height });
     }
   }
   const panels = specs.map((spec) => placePanel(spec, where.get(spec)));
@@ -484,8 +545,8 @@ export function layoutControls(project) {
   return { panels, fits, overlaps };
 }
 
-function placePanel({ key, title, width, button, menu, knobs }, { x, y }) {
-  const panel = { key, x, y, width, height: PANEL_HEIGHT, title, button: null, menu: null, knobs: [] };
+function placePanel({ key, title, width, height, button, menu, knobs }, { x, y }) {
+  const panel = { key, x, y, width, height, title, button: null, menu: null, knobs: [] };
   if (button) {
     panel.button = { control: button, x: x + width - PAD - BUTTON.width, y: y + PAD + 1, ...BUTTON };
   }
@@ -497,7 +558,7 @@ function placePanel({ key, title, width, button, menu, knobs }, { x, y }) {
   for (const control of knobs) {
     const { width: w, height: h } = CONTROL_STYLES[control.style];
     // Centre shorter controls (horizontal sliders) in the row.
-    const knobY = y + PAD + TITLE_HEIGHT + (ROW_HEIGHT - h) / 2;
+    const knobY = y + PAD + TITLE_HEIGHT + (menu ? MENU_ROW : 0) + (ROW_HEIGHT - h) / 2;
     panel.knobs.push({ control, x: knobX, y: knobY, width: w, height: h });
     knobX += w + GAP;
   }
@@ -511,10 +572,10 @@ function intersects(a, b, gap) {
 
 // The first spot (top to bottom, left to right, on the snap grid) where a
 // panel of this width fits inside the window without touching the others.
-function findFreeSpace(placed, width) {
-  for (let y = MARGIN; y + PANEL_HEIGHT <= UI_HEIGHT - MARGIN; y += SNAP) {
+function findFreeSpace(placed, width, height) {
+  for (let y = MARGIN; y + height <= UI_HEIGHT - MARGIN; y += SNAP) {
     for (let x = MARGIN; x + width <= UI_WIDTH - MARGIN; x += SNAP) {
-      const spot = { x, y, width, height: PANEL_HEIGHT };
+      const spot = { x, y, width, height };
       if (!placed.some((p) => intersects(spot, p, MARGIN))) return { x, y };
     }
   }
@@ -570,7 +631,7 @@ export function renderControlsEditor(container, project, onChange) {
     controls.length === 0
       ? 'No controls yet. Without controls, the preset has no custom window.'
       : project.ui.positions === null
-        ? 'Controls are placed automatically: Global, Glide, Amp envelope, Articulation, Mixer, each effect in chain order, each modulator, then sequences. Drag a panel in the preview to move it.'
+        ? 'Controls are placed automatically: Global, Glide, Amp envelope, Articulation, Mixer, each effect in chain order, each modulator, then the arpeggiator and sequences. Drag a panel in the preview to move it.'
         : 'Drag a panel in the preview to move it. New panels go into the first free space.';
 
   // One row per control, in layout order.
@@ -606,7 +667,34 @@ export function renderControlsEditor(container, project, onChange) {
     rerender();
     onChange();
   });
-  addRow.append('Add control: ', targetSelect, ' ', addButton);
+  // "Add all": every control in the selected option's section that isn't
+  // there yet and applies right now (e.g. not resonance on lowpass_1pl).
+  const groups = availableTargets(project);
+  const groupOf = (value) => {
+    const { effectId, key } = JSON.parse(value);
+    return groups.find((g) => g.effectId === effectId && g.options.some((o) => o.key === key));
+  };
+  const missing = (group) =>
+    group.options.filter(
+      ({ key }) =>
+        !controls.some((c) => c.effectId === group.effectId && c.key === key) &&
+        resolveTarget(project, { effectId: group.effectId, key })?.applies,
+    );
+  const addAllButton = document.createElement('button');
+  const updateAddAll = () => {
+    const group = targetSelect.value ? groupOf(targetSelect.value) : null;
+    addAllButton.textContent = group ? `Add all ${group.title}` : 'Add all';
+    addAllButton.disabled = !group || missing(group).length === 0;
+  };
+  targetSelect.addEventListener('change', updateAddAll);
+  addAllButton.addEventListener('click', () => {
+    const group = groupOf(targetSelect.value);
+    for (const { key } of missing(group)) addControl(project, group.effectId, key);
+    rerender();
+    onChange();
+  });
+  updateAddAll();
+  addRow.append('Add control: ', targetSelect, ' ', addButton, ' ', addAllButton);
 
   // Back to the automatic layout.
   const resetRow = document.createElement('p');
@@ -688,7 +776,8 @@ export function addEnvelopeControls(project) {
 }
 
 export function removeEnvelopeControls(project) {
-  project.ui.controls = project.ui.controls.filter((c) => !(c.effectId === null && !(c.key in INSTRUMENT_SETTINGS)));
+  // Only the envelope's own controls (attack, decay, … and the curves).
+  project.ui.controls = project.ui.controls.filter((c) => !resolveTarget(project, c)?.needsEnvelope);
 }
 
 // After an effect's type (or a modulator's setting) changes, drop controls
@@ -702,8 +791,10 @@ export function removeInapplicableControls(project, owner) {
 // A new control for a setting. Its label and range start from the setting.
 function createControl(project, effectId, key) {
   const target = resolveTarget(project, { effectId, key });
-  if (key === 'enabled' || key === 'monophonic' || key === 'play') return { kind: 'button', effectId, key };
-  if (key === 'articulation' || key === 'glideMode' || key === 'sequenceMenu') return { kind: 'menu', effectId, key };
+  if (key === 'enabled' || key === 'monophonic' || key === 'play' || key === 'arpEnabled') return { kind: 'button', effectId, key };
+  if (key === 'articulation' || key === 'glideMode' || key === 'sequenceMenu' || key === 'arpOrder') {
+    return { kind: 'menu', effectId, key };
+  }
   return {
     kind: 'knob',
     effectId,
@@ -734,6 +825,8 @@ function renderControlRow(control, panelTitle, project, rerender, redrawPreview,
       glideMode: 'Menu (Legato / Always / Off)',
       play: 'Play button (On plays the sequence from the window, no key needed)',
       sequenceMenu: 'Menu (Off / each sequence; plays from the window)',
+      arpEnabled: 'On/off button',
+      arpOrder: 'Menu (one option per order)',
     };
     cell(description[control.key]);
     cell('');

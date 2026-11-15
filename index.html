@@ -35,6 +35,7 @@
       <li><strong>Chrome or Edge</strong> give the best folder picker. Other browsers work too, but the folder dialog looks different.</li>
       <li><strong>Mix layers</strong> play several sample names together on the same keys (e.g. close and room mics), each with its own volume knob in the plugin's Mixer panel.</li>
       <li><strong>Sequences</strong> are patterns the instrument plays by itself. Pressing a trigger key (C-1 to B-1 by default) starts one, transposed by that key. Trigger keys don't play samples. A Play button or Play menu (in Controls) plays one from the plugin window instead, with no key held.</li>
+      <li>The <strong>Arpeggiator</strong> plays held notes one at a time in a pattern. While it is on, every note goes through it, including sequence notes.</li>
       <li><strong>Save project</strong> keeps your work as a .json file. To carry on later, load it, then pick the sample folder again.</li>
     </ul>
   </details>
@@ -125,6 +126,14 @@
       The pattern follows the DAW's tempo.
     </p>
     <div id="sequences"></div>
+  </section>
+
+  <section id="arpeggiator-section" hidden>
+    <h2>Arpeggiator</h2>
+    <p class="hint">
+      Plays the notes you hold one at a time, in a pattern, across octaves. Needs Decent Sampler 1.26 or later.
+    </p>
+    <div id="arpeggiator"></div>
   </section>
 
   <section id="modulators-section" hidden>

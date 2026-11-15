@@ -29,6 +29,9 @@ export function findWarnings(project) {
     ...findRootsOutside(zones),
     ...findMixedFormats(project),
     ...findSequenceWarnings(project, zones),
+    ...(project.arpeggiator.included && project.sequences.length > 0
+      ? ['While the arpeggiator is on, sequence notes go through it and are arpeggiated, not played as written']
+      : []),
   ];
   return { messages, overlapping };
 }

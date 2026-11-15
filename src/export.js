@@ -41,6 +41,7 @@ import { EFFECT_KINDS, NOTE_EFFECTS_TAG, effectTypes, isImpulseResponseFile, vis
 import { CONTROL_STYLES, UI_HEIGHT, UI_WIDTH, layoutControls, ownerTitle, resolveTarget } from './ui.js';
 import { MODULATOR_KINDS, MOD_BEHAVIORS, canTargetEffects, resolveModTarget, visibleFields } from './modulators.js';
 import { LOOP_MODES, hasTrigger } from './sequences.js';
+import { ARP_DIVISIONS, ARP_NUMBERS, ARP_OCTAVE_MODES, ARP_ORDERS } from './arpeggiator.js';
 
 const ROUND_ROBIN_MODES = ['round_robin', 'random', 'true_random'];
 
@@ -150,6 +151,7 @@ export function buildPresetXml(project) {
   ];
   if (midi.length > 0) lines.push('  <midi>', ...midi, '  </midi>');
   if (project.sequences.length > 0) lines.push(...sequenceLines(project));
+  if (project.arpeggiator.included) lines.push(arpeggiatorLine(project.arpeggiator));
 
   lines.push('</DecentSampler>', '');
   return lines.join('\n');
@@ -255,6 +257,19 @@ function sequenceTriggerLines(project) {
     );
   });
   return lines;
+}
+
+// The <arpeggiator> element, every setting written out as in the docs'
+// example. The fixed BPM only when it's used.
+function arpeggiatorLine(arp) {
+  return (
+    `  <arpeggiator enabled="${arp.enabled}" arpOrder="${arp.order}" arpOctaveRange="${arp.octaveRange}"` +
+    ` arpOctaveMode="${arp.octaveMode}" arpStepCount="${arp.stepCount}" arpGateLength="${arp.gateLength}"` +
+    ` arpFollowGlobalTempo="${arp.followTempo}" arpSyncDivision="${arp.syncDivision}"` +
+    ` arpRateMultiplier="${arp.rateMultiplier}"` +
+    (arp.followTempo ? '' : ` arpOverrideBpm="${arp.overrideBpm}"`) +
+    '/>'
+  );
 }
 
 // The <noteSequences> element: one <sequence> per sequence, its length in
@@ -369,7 +384,7 @@ function uiLines(project) {
                 `<binding type="general" level="tag" identifier="${tag}" parameter="TAG_POLYPHONY"` +
                 ` translation="fixed_value" translationValue="${on ? 1 : -1}"/>`,
             )
-          : [`<binding ${target.bindingTarget} parameter="ENABLED" translation="fixed_value" translationValue="${on}"/>`];
+          : [`<binding ${target.bindingTarget} parameter="${target.parameter}" translation="fixed_value" translationValue="${on}"/>`];
         return `        <state name="${name}">${bindings.join('')}</state>`;
       };
       if (control.key === 'play') {
@@ -411,7 +426,7 @@ function uiLines(project) {
 // selector example). It starts on the first, which is on when the preset
 // loads. Keyswitches find it by its tag to keep it in step.
 function menuLines(project, { control, x, y, width, height }) {
-  if (control.key === 'glideMode') return glideMenuLines(project, { control, x, y, width, height });
+  if (control.key === 'glideMode' || control.key === 'arpOrder') return valueMenuLines(project, { control, x, y, width, height });
   if (control.key === 'sequenceMenu') return sequenceMenuLines(project, { control, x, y, width, height });
   const { options } = resolveTarget(project, control);
   const lines = [
@@ -481,10 +496,11 @@ function sequenceMenuLines(project, { x, y, width, height }) {
   return lines;
 }
 
-// The glide mode menu: one option per mode, each setting GLIDE_MODE to its
-// name (tested in the plugin; numbers don't work). It starts on the current mode.
-function glideMenuLines(project, { control, x, y, width, height }) {
-  const { options, value } = resolveTarget(project, control);
+// A menu of a setting's values: the glide mode (GLIDE_MODE, by name; tested
+// in the plugin, numbers don't work) or the arpeggiator order (ARP_ORDER, by
+// name; tested). Each option sets the value; it starts on the current one.
+function valueMenuLines(project, { control, x, y, width, height }) {
+  const { options, value, bindingTarget, parameter } = resolveTarget(project, control);
   const lines = [
     `      <menu x="${x}" y="${y}" width="${width}" height="${height}" value="${options.findIndex((o) => o.value === value) + 1}"` +
       ' textColor="FFFFFFFF" backgroundColor="FF222222">',
@@ -492,7 +508,7 @@ function glideMenuLines(project, { control, x, y, width, height }) {
   for (const option of options) {
     lines.push(
       `        <option name="${option.name}">`,
-      '          <binding type="amp" level="instrument" position="0" parameter="GLIDE_MODE"' +
+      `          <binding ${bindingTarget} parameter="${parameter}"` +
         ` translation="fixed_value" translationValue="${option.value}"/>`,
       '        </option>',
     );
@@ -598,6 +614,7 @@ export function checkPreset(project, xml) {
   problems.push(...checkMixLayerVolumes(project));
   problems.push(...checkVoiceLimits(project));
   problems.push(...checkSequences(project));
+  problems.push(...checkArpeggiator(project));
   problems.push(...checkModulators(project));
   if (project.envelope.enabled) problems.push(...checkEnvelope(project.envelope));
   project.effects.forEach((effect, index) => {
@@ -737,6 +754,26 @@ function checkModulators(project) {
 }
 
 // Each articulation in use needs its own keyswitch note, 0–127.
+// Arpeggiator settings: known words, and numbers inside the docs' ranges
+// (whole numbers for octave range and steps).
+function checkArpeggiator(project) {
+  const arp = project.arpeggiator;
+  if (!arp.included) return [];
+  const problems = [];
+  const known = (list, value) => list.some(([v]) => v === value);
+  if (!known(ARP_ORDERS, arp.order)) problems.push(`Arpeggiator: unknown order "${arp.order}"`);
+  if (!known(ARP_OCTAVE_MODES, arp.octaveMode)) problems.push(`Arpeggiator: unknown octave mode "${arp.octaveMode}"`);
+  if (!known(ARP_DIVISIONS, arp.syncDivision)) problems.push(`Arpeggiator: unknown step size "${arp.syncDivision}"`);
+  for (const { key, label, min, max, integer } of ARP_NUMBERS) {
+    const value = arp[key];
+    if (!Number.isFinite(value) || value < min || value > max || (integer && !Number.isInteger(value))) {
+      const range = max === Infinity ? `${min} or more` : `from ${min} to ${max}`;
+      problems.push(`Arpeggiator: ${label.toLowerCase()} must be ${integer ? 'a whole number ' : ''}${range}`);
+    }
+  }
+  return problems;
+}
+
 // Sequence rules: a whole number of steps (1–128) and a step size; notes
 // inside the sequence with velocity 0–1; trigger keys all set (or all blank),
 // 0–127, lowest first.

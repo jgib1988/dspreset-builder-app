@@ -2,6 +2,8 @@
 // will be generated from it on export (step 4). Later steps add fields to
 // each sample (e.g. loop points).
 
+import { createArpeggiator } from './arpeggiator.js';
+
 // The docs' default envelope curve shapes (-100 = log, 0 = linear, 100 = exp).
 // Curves still at these values aren't exported.
 export const CURVE_DEFAULTS = { attackCurve: -100, decayCurve: 100, releaseCurve: 100 };
@@ -53,6 +55,8 @@ export function createProject(folderName) {
     // sequences.js (createSequence) for the shape.
     sequences: [],
     nextSequenceNumber: 1,
+    // The arpeggiator's settings; see arpeggiator.js (createArpeggiator).
+    arpeggiator: createArpeggiator(),
     // Decent Sampler's window (docs: <ui>), only exported when there are
     // controls. bgColor is 8-digit ARGB. Each control is e.g.
     // { kind: 'knob', effectId: 'fx1', key: 'frequency', label: 'Frequency',

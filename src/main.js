@@ -12,6 +12,7 @@ import { renderChokeEditor } from './choke.js';
 import { renderKeyswitchEditor } from './keyswitch.js';
 import { renderMixLayerEditor } from './mixlayer.js';
 import { renderSequencesEditor } from './sequences.js';
+import { renderArpeggiatorEditor } from './arpeggiator.js';
 import { renderEffectsEditor } from './effects.js';
 import { renderModulatorsEditor } from './modulators.js';
 import { addControl, renderControlsEditor } from './ui.js';
@@ -57,6 +58,8 @@ const noteEffectsSection = document.querySelector('#note-effects-section');
 const noteEffectsContainer = document.querySelector('#note-effects');
 const sequencesSection = document.querySelector('#sequences-section');
 const sequencesContainer = document.querySelector('#sequences');
+const arpeggiatorSection = document.querySelector('#arpeggiator-section');
+const arpeggiatorContainer = document.querySelector('#arpeggiator');
 const modulatorsSection = document.querySelector('#modulators-section');
 const modulatorsContainer = document.querySelector('#modulators');
 const controlsSection = document.querySelector('#controls-section');
@@ -111,6 +114,7 @@ pickButton.addEventListener('click', async () => {
     project.nextModulatorNumber = previous.nextModulatorNumber;
     project.sequences = previous.sequences;
     project.nextSequenceNumber = previous.nextSequenceNumber;
+    project.arpeggiator = previous.arpeggiator;
   } else {
     addControl(project, null, 'volume'); // a new instrument starts with a Volume control
   }
@@ -273,6 +277,9 @@ function render() {
   // so the Controls section is redrawn too.
   renderSequencesEditor(sequencesContainer, project, renderControlsAndExport);
   sequencesSection.hidden = false;
+  // Unticking the arpeggiator removes its controls, so redraw those too.
+  renderArpeggiatorEditor(arpeggiatorContainer, project, renderControlsAndExport);
+  arpeggiatorSection.hidden = false;
   // Modulator changes add, remove or restart controls, so redraw those too.
   renderModulatorsEditor(modulatorsContainer, project, renderControlsAndExport);
   modulatorsSection.hidden = false;

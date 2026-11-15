@@ -43,6 +43,7 @@ function withDefaults(saved) {
     ...defaults,
     ...saved,
     envelope: { ...defaults.envelope, ...saved.envelope },
+    arpeggiator: { ...defaults.arpeggiator, ...saved.arpeggiator },
     ui: {
       ...defaults.ui,
       ...saved.ui,

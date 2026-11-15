@@ -14,6 +14,9 @@
 // only shared (global scope) LFOs, MIDI CC and random can move our
 // instrument-wide effects, and only when targeted by effectIndex (effectTags
 // does nothing for modulators). Envelopes and velocity can't, in any scope.
+// Any modulator can move per-note effects, which live in every group: the
+// export writes one binding per group (groupIndex), since groupTags doesn't
+// work for modulators (tested in the plugin).
 // Checks on the values happen in export.js (checkModulators).
 
 import { EFFECT_BINDINGS, EFFECT_KINDS, visibleParams } from './effects.js';
@@ -141,31 +144,36 @@ const AMP_TARGETS = {
   globalPan: { label: 'Pan', parameter: 'PAN', behavior: 'modulate', range: [-50, 50] },
 };
 
-// Whether this modulator may target effect parameters (see above).
+// Whether this modulator may target instrument-wide effect parameters (see
+// above). Per-note effects can be targeted by any modulator.
 export function canTargetEffects(modulator) {
   return ['lfo', 'midiCC', 'random'].includes(modulator.kind) && modulator.scope === 'global';
 }
 
 // What a target points at: { label, parameter, bindingTarget, behavior,
-// range }, or null if it no longer exists or doesn't apply.
+// range }, or null if it no longer exists or doesn't apply. For a per-note
+// effect, bindingTarget is null and `noteEffectIndex` is its place in the
+// per-note chain; the export adds the groupIndex of each group.
 export function resolveModTarget(project, { effectId, key }) {
   if (effectId === null) {
     const target = AMP_TARGETS[key];
     return target ? { ...target, bindingTarget: 'type="amp" level="instrument" position="0"' } : null;
   }
-  const index = project.effects.findIndex((e) => e.id === effectId);
+  const noteIndex = project.noteEffects.findIndex((e) => e.id === effectId);
+  const index = noteIndex >= 0 ? noteIndex : project.effects.findIndex((e) => e.id === effectId);
   if (index < 0) return null;
-  const effect = project.effects[index];
+  const effect = noteIndex >= 0 ? project.noteEffects[noteIndex] : project.effects[index];
   const param = visibleParams(effect).find((p) => p.key === key);
   const parameter = EFFECT_BINDINGS[effect.kind]?.[key];
   if (!param || !parameter) return null;
   // A swing of a tenth of the parameter's range either side, rounded.
   const swing = Number(((param.max - param.min) / 10).toPrecision(2));
   return {
-    label: `${EFFECT_KINDS[effect.kind].label} (${effect.id}) › ${param.label}`,
+    label: `${noteIndex >= 0 ? 'Per note ' : ''}${EFFECT_KINDS[effect.kind].label} (${effect.id}) › ${param.label}`,
     parameter,
     // Its place in the chain, which follows reordering.
-    bindingTarget: `type="effect" level="instrument" effectIndex="${index}"`,
+    bindingTarget: noteIndex >= 0 ? null : `type="effect" level="instrument" effectIndex="${index}"`,
+    noteEffectIndex: noteIndex >= 0 ? noteIndex : null,
     behavior: 'modulate',
     range: [-swing, swing],
   };
@@ -309,6 +317,15 @@ function renderTarget(modulator, target, project, rerender, onChange) {
     if (!canTargetEffects(modulator) && target.effectId !== effect.id) return;
     const group = document.createElement('optgroup');
     group.label = `${index + 1}. ${EFFECT_KINDS[effect.kind].label} (${effect.id})`;
+    for (const param of visibleParams(effect)) {
+      if (EFFECT_BINDINGS[effect.kind]?.[param.key]) group.append(new Option(param.label, JSON.stringify({ effectId: effect.id, key: param.key })));
+    }
+    if (group.children.length > 0) select.append(group);
+  });
+  // Per-note effects: any modulator can move them.
+  project.noteEffects.forEach((effect, index) => {
+    const group = document.createElement('optgroup');
+    group.label = `Per note ${index + 1}. ${EFFECT_KINDS[effect.kind].label} (${effect.id})`;
     for (const param of visibleParams(effect)) {
       if (EFFECT_BINDINGS[effect.kind]?.[param.key]) group.append(new Option(param.label, JSON.stringify({ effectId: effect.id, key: param.key })));
     }

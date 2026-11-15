@@ -180,6 +180,41 @@ td.muted {
   margin-left: 0.3rem;
 }
 
+/* Sequences */
+.seq-grid {
+  border-collapse: collapse;
+  margin: 0.4rem 0;
+  font-size: 0.8em;
+}
+
+.seq-grid th {
+  font-weight: normal;
+  color: #666;
+  padding: 0 0.4rem 0 0;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.seq-cell {
+  width: 1.3em;
+  height: 1.3em;
+  padding: 0;
+  border: 1px solid #ddd;
+  cursor: pointer;
+}
+
+.seq-beat {
+  border-left: 2px solid #999;
+}
+
+.seq-note-start {
+  background: #2a6fdb;
+}
+
+.seq-note-tail {
+  background: #7fa6e8;
+}
+
 /* Controls */
 .controls-table td {
   border: none;

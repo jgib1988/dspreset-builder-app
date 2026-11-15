@@ -2,6 +2,9 @@
 // as <effects> in this order (docs: "The <effects> element"). Effects are
 // processed top to bottom.
 //
+// The Per-note effects section uses the same editor: a chain copied into
+// every <group>, so each note gets its own copy (docs: group-level effects).
+// Only some types work there (NOTE_EFFECT_TYPES).
 import { addEffectControls, ownerTitle, removeInapplicableControls } from './ui.js';
 import { removeMissingModTargets } from './modulators.js';
 
@@ -15,6 +18,19 @@ import { removeMissingModTargets } from './modulators.js';
 // Filter types from the docs. "lowpass" is the current name for the legacy
 // "lowpass_4pl". lowpass_1pl is a gentler 1-pole lowpass with no resonance.
 const FILTER_TYPES = ['lowpass', 'highpass', 'bandpass', 'lowpass_1pl'];
+
+// Kinds that work as per-note (group-level) effects, with their allowed
+// types (docs: lowpass, highpass, bandpass, gain, chorus; tested in the plugin).
+export const NOTE_EFFECT_TYPES = {
+  filter: ['lowpass', 'highpass', 'bandpass'],
+  gain: ['gain'],
+  chorus: ['chorus'],
+};
+
+// Every group carries this tag when there are per-note effects. Their controls
+// find them with groupTags plus the effect's place in the chain (effectTags
+// doesn't reach group-level effects; tested in the plugin).
+export const NOTE_EFFECTS_TAG = 'notefx';
 
 // Parameter helpers. `show` (optional) hides a parameter, and leaves it out
 // of the export, when it doesn't apply to the effect's current settings.
@@ -200,11 +216,16 @@ export function isImpulseResponseFile(path) {
   return /\.(wav|aif|aiff)$/i.test(path);
 }
 
+// The Decent Sampler types an effect can have: fewer for per-note effects.
+export function effectTypes(project, effect) {
+  return project.noteEffects.includes(effect) ? NOTE_EFFECT_TYPES[effect.kind] : EFFECT_KINDS[effect.kind].types;
+}
+
 // `onChange` is called after any effect changes, so the XML preview and
-// export checks can update.
-export function renderEffectsEditor(container, project, onChange) {
-  const rerender = () => renderEffectsEditor(container, project, onChange);
-  const effects = project.effects;
+// export checks can update. `perNote` edits the per-note chain instead.
+export function renderEffectsEditor(container, project, onChange, perNote = false) {
+  const rerender = () => renderEffectsEditor(container, project, onChange, perNote);
+  const effects = perNote ? project.noteEffects : project.effects;
 
   const hint = document.createElement('p');
   hint.className = 'hint';
@@ -213,21 +234,23 @@ export function renderEffectsEditor(container, project, onChange) {
   const list = document.createElement('ol');
   list.className = 'effects-list';
   effects.forEach((effect, index) => {
-    list.append(renderEffect(effect, index, project, rerender, onChange));
+    list.append(renderEffect(effect, index, effects, project, rerender, onChange));
   });
 
   // "Add effect" row: pick a kind, then add it to the end of the chain.
   const addRow = document.createElement('p');
   const kindSelect = document.createElement('select');
   for (const [kind, { label }] of Object.entries(EFFECT_KINDS)) {
-    kindSelect.append(new Option(label, kind));
+    if (!perNote || NOTE_EFFECT_TYPES[kind]) kindSelect.append(new Option(label, kind));
   }
   const addButton = document.createElement('button');
   addButton.textContent = 'Add';
   addButton.addEventListener('click', () => {
-    const effect = createEffect(kindSelect.value, `fx${project.nextEffectNumber}`);
+    // Ids are never reused: fx1, fx2… for instrument effects, nfx1… per note.
+    const effect = perNote
+      ? createEffect(kindSelect.value, `nfx${project.nextNoteEffectNumber++}`)
+      : createEffect(kindSelect.value, `fx${project.nextEffectNumber++}`);
     effects.push(effect);
-    project.nextEffectNumber += 1;
     addEffectControls(project, effect);
     rerender();
     onChange();
@@ -246,9 +269,9 @@ function createEffect(kind, id) {
   return effect;
 }
 
-function renderEffect(effect, index, project, rerender, onChange) {
-  const effects = project.effects;
+function renderEffect(effect, index, effects, project, rerender, onChange) {
   const definition = EFFECT_KINDS[effect.kind];
+  const types = effectTypes(project, effect);
   const item = document.createElement('li');
   item.className = 'effect';
 
@@ -270,9 +293,9 @@ function renderEffect(effect, index, project, rerender, onChange) {
   item.append(enabledLabel);
 
   // A type menu only when the kind has several Decent Sampler types (filter).
-  if (definition.types.length > 1) {
+  if (types.length > 1) {
     const typeSelect = document.createElement('select');
-    for (const type of definition.types) typeSelect.append(new Option(type, type));
+    for (const type of types) typeSelect.append(new Option(type, type));
     typeSelect.value = effect.type;
     typeSelect.addEventListener('change', () => {
       effect.type = typeSelect.value;

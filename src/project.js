@@ -21,6 +21,14 @@ export function createProject(folderName) {
     // globalTuning, globalPan on <groups>). Only exported when not 0.
     globalTuning: 0,
     globalPan: 0,
+    // Glide (portamento) for the whole instrument (docs: glideTime in
+    // seconds, glideMode on <groups>). 0 means no glide. 'legato' (the docs'
+    // default) glides only from a held note; 'always' from the last note.
+    glideTime: 0,
+    glideMode: 'legato',
+    // One voice at a time (docs: polyphony="1" on a <tag>). Each mix layer is
+    // monophonic on its own; release samples are left out.
+    monophonic: false,
     // One amp envelope for the whole instrument (docs: attack, decay, sustain,
     // release on <groups>). Only exported when `enabled` is true. Times in
     // seconds, sustain 0–1. These names are what UI controls will bind to.
@@ -30,12 +38,21 @@ export function createProject(folderName) {
     effects: [],
     // Counter for effect ids, so an id is never reused after an effect is removed.
     nextEffectNumber: 1,
+    // Per-note effects: a chain copied into every <group>, so each note gets
+    // its own copy (docs: group-level effects). Same shape as effects, ids
+    // nfx1, nfx2…; only filter, gain and chorus.
+    noteEffects: [],
+    nextNoteEffectNumber: 1,
     // LFOs, e.g. { id: 'lfo1', kind: 'lfo', enabled: true, shape: 'sine',
     // frequency: 5, modAmount: 1, delayTime: 0, scope: 'global', targets:
     // [{ effectId: null, key: 'globalTuning', behavior: 'modulate', min: -0.2, max: 0.2 }] }.
     // See modulators.js.
     modulators: [],
     nextModulatorNumber: 1,
+    // Note sequences, each with its step-grid notes and trigger keys. See
+    // sequences.js (createSequence) for the shape.
+    sequences: [],
+    nextSequenceNumber: 1,
     // Decent Sampler's window (docs: <ui>), only exported when there are
     // controls. bgColor is 8-digit ARGB. Each control is e.g.
     // { kind: 'knob', effectId: 'fx1', key: 'frequency', label: 'Frequency',
@@ -56,9 +73,13 @@ export function createProject(folderName) {
     // Release samples play to the end of the file instead of following the
     // instrument's amp envelope (docs: ampEnvEnabled="false" on their groups).
     releaseIgnoresEnvelope: false,
-    // Choke groups by sample name, e.g. { HatOpen: 1, HatClosed: 1 }: samples
-    // in the same group cut each other off (docs: tags, silencedByTags).
-    chokeGroups: {},
+    // Choking by sample name: which names cut each one off, e.g.
+    // { HatOpen: ['HatClosed', 'HatOpen'] } (the closed hat and a new open hat
+    // stop the open hat; docs: tags, silencedByTags). Not necessarily both ways.
+    chokedBy: {},
+    // Most notes of a name that can sound at once, e.g. { Crash: 2 } (docs:
+    // polyphony on <tag>). Names not listed have no limit.
+    voiceLimits: {},
     // How a cut-off sample stops: 'fast' (immediately, the docs' default),
     // 'normal' (the amp envelope's release; docs: silencingMode) or 'decay'
     // (a fade over chokeDecay seconds; docs: silencingDecay).
@@ -114,5 +135,11 @@ export function createSample({ path, sizeBytes, info, readError, parsed, parseEr
     loopStart: null,
     loopEnd: null,
     loopCrossfade: 0,
+    // Level and tuning, set in the Level and tuning box (levels.js): volume
+    // in dB, pan −100 (left) to 100 (right), tuning in semitones (docs:
+    // volume, pan, tuning on <sample>). Values at 0 aren't exported.
+    volumeDb: 0,
+    pan: 0,
+    tuning: 0,
   };
 }

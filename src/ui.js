@@ -1,15 +1,17 @@
-// The Controls section: knobs, sliders, on/off buttons, the articulation
-// menu and mix layer volumes shown in Decent Sampler's own window (docs: "The <ui> element"), each
+// The Controls section: knobs, sliders, on/off buttons, the articulation and
+// glide mode menus, the Mono/Poly button, mix layer volumes and sequence
+// Play buttons and Play menu shown in Decent Sampler's own window (docs: "The <ui> element"), each
 // bound to a setting (docs: "Appendix B: The <binding> element"). Settings
 // are instrument-wide ones, effect parameters and modulator settings.
 //
 // A control stores only what it targets and how it looks. Its starting value
 // is read from the setting it controls, so the project stays the single
 // source of truth. Controls are placed automatically (layoutControls):
-// Global, Amp envelope, Articulation and Mixer panels first, then one panel
-// per effect in chain order, then one per modulator.
+// Global, Glide, Amp envelope, Articulation and Mixer panels first, then one panel
+// per effect in chain order, one per per-note effect, one per modulator, then
+// the Sequences panel (Play menu) and one panel per sequence (Play button, Rate).
 
-import { EFFECT_BINDINGS, EFFECT_KINDS, visibleParams } from './effects.js';
+import { EFFECT_BINDINGS, EFFECT_KINDS, NOTE_EFFECTS_TAG, visibleParams } from './effects.js';
 import { articulationLabel, mixLayerLabel, mixLayerVolume, usedArticulations, usedMixLayers } from './mapping.js';
 import { MODULATOR_BINDINGS, MODULATOR_KINDS, visibleFields } from './modulators.js';
 
@@ -27,6 +29,8 @@ const AMP_TARGETS = [
   // The docs give no range for tuning; ±48 matches the Global section's check.
   { key: 'globalTuning', label: 'Tuning', parameter: 'GLOBAL_TUNING', range: [-12, 12], valid: [-48, 48] },
   { key: 'globalPan', label: 'Pan', parameter: 'PAN', range: [-100, 100], valid: [-100, 100] },
+  // type="amp" as in the docs' table (type="general", as in their example, also works).
+  { key: 'glideTime', label: 'Glide', parameter: 'GLIDE_TIME', range: [0, 2], valid: [0, Infinity] },
   { key: 'attack', label: 'Attack', parameter: 'ENV_ATTACK', range: [0, 10], valid: [0, Infinity] },
   { key: 'decay', label: 'Decay', parameter: 'ENV_DECAY', range: [0, 10], valid: [0, Infinity] },
   { key: 'sustain', label: 'Sustain', parameter: 'ENV_SUSTAIN', range: [0, 1], valid: [0, 1] },
@@ -72,14 +76,24 @@ const INSTRUMENT_SETTINGS = {
   velocityTracking: 'Velocity tracking',
   globalTuning: 'Tuning',
   globalPan: 'Pan',
+  glideTime: 'Glide time',
 };
 
 // Panels for controls with effectId null. A control's panel is its effect's
 // id, or one of these.
-const SECTION_TITLES = { global: 'Global', amp: 'Amp envelope', articulation: 'Articulation', mixer: 'Mixer' };
+const SECTION_TITLES = {
+  global: 'Global',
+  glide: 'Glide',
+  amp: 'Amp envelope',
+  articulation: 'Articulation',
+  mixer: 'Mixer',
+  sequences: 'Sequences',
+};
 function sectionKey({ effectId, key }) {
   if (effectId !== null) return effectId;
   if (key === 'articulation') return 'articulation';
+  if (key === 'glideMode' || key === 'monophonic') return 'glide';
+  if (key === 'sequenceMenu') return 'sequences';
   if (mixLayerNumber(key) !== null) return 'mixer';
   return key in INSTRUMENT_SETTINGS ? 'global' : 'amp';
 }
@@ -112,11 +126,16 @@ function mixLayerNumber(key) {
 
 // The name shown for an effect or modulator, in the plugin's panels and in
 // the app: its kind, numbered when there are several of the same kind
-// (e.g. "LFO 1", "LFO 2"), in list order.
+// (e.g. "LFO 1", "LFO 2"), in list order. Per-note effects say so, e.g.
+// "Note filter".
 export function ownerTitle(project, owner) {
-  const isEffect = project.effects.includes(owner);
-  const label = (isEffect ? EFFECT_KINDS : MODULATOR_KINDS)[owner.kind].label;
-  const same = (isEffect ? project.effects : project.modulators).filter((o) => o.kind === owner.kind);
+  // A sequence's panel is titled with its name.
+  if (project.sequences.includes(owner)) return owner.name.trim() || owner.id;
+  const list = [project.effects, project.noteEffects, project.modulators].find((l) => l.includes(owner));
+  const isModulator = list === project.modulators;
+  let label = (isModulator ? MODULATOR_KINDS : EFFECT_KINDS)[owner.kind].label;
+  if (list === project.noteEffects) label = `Note ${label.toLowerCase()}`;
+  const same = list.filter((o) => o.kind === owner.kind);
   return same.length > 1 ? `${label} ${same.indexOf(owner) + 1}` : label;
 }
 
@@ -134,6 +153,90 @@ export function resolveTarget(project, { effectId, key }) {
       order: 0,
       sectionTitle: SECTION_TITLES.articulation,
       options: articulations.map((n) => ({ articulation: n, name: articulationLabel(project, n) })),
+      needsEnvelope: false,
+      needsValue: null,
+      applies: true,
+    };
+  }
+  // The Glide panel: the glide mode menu (docs: GLIDE_MODE, with the mode's
+  // name) and the Mono/Poly button (docs: TAG_POLYPHONY on the mono tags).
+  if (effectId === null && key === 'glideMode') {
+    return {
+      key,
+      label: 'Mode',
+      order: 0,
+      sectionTitle: SECTION_TITLES.glide,
+      value: project.glideMode,
+      options: [
+        { name: 'Legato', value: 'legato' },
+        { name: 'Always', value: 'always' },
+        { name: 'Off', value: 'off' },
+      ],
+      needsEnvelope: false,
+      needsValue: null,
+      applies: true,
+    };
+  }
+  if (effectId === null && key === 'monophonic') {
+    return {
+      key,
+      label: 'Mono/Poly',
+      order: 0,
+      sectionTitle: SECTION_TITLES.glide,
+      value: project.monophonic,
+      needsEnvelope: false,
+      needsValue: null,
+      applies: true,
+    };
+  }
+  // The sequence Play menu: Off, then one option per sequence (docs: note
+  // sequences tutorial, seqTriggerBehavior on/off; tested in the plugin).
+  // Only there while there are sequences.
+  if (effectId === null && key === 'sequenceMenu') {
+    if (project.sequences.length === 0) return null;
+    return {
+      key,
+      label: 'Play menu',
+      order: 0,
+      sectionTitle: SECTION_TITLES.sequences,
+      value: null, // starts on Off
+      options: [{ name: 'Off', sequenceIndex: null }, ...project.sequences.map((s, i) => ({ name: ownerTitle(project, s), sequenceIndex: i }))],
+      needsEnvelope: false,
+      needsValue: null,
+      applies: true,
+    };
+  }
+  // A sequence's Play button (On starts it from the window, Off stops it) and
+  // Rate knob. RATE sets the sequence's own rate in steps per beat (4 = 16ths,
+  // 1 = quarter notes), for key and window playback alike (tested in the
+  // plugin). The docs give no range; 1–8 covers the app's step sizes.
+  const sequenceIndex = project.sequences.findIndex((s) => s.id === effectId);
+  if (sequenceIndex >= 0) {
+    if (key === 'rate') {
+      return {
+        key,
+        label: 'Rate',
+        order: 0,
+        sectionTitle: ownerTitle(project, project.sequences[sequenceIndex]),
+        value: project.sequences[sequenceIndex].stepsPerBeat,
+        bindingTarget: `type="note_sequence" level="instrument" seqIndex="${sequenceIndex}"`,
+        parameter: 'RATE',
+        range: [1, 8],
+        valid: [0.001, Infinity],
+        needsEnvelope: false,
+        needsValue: null,
+        applies: true,
+        integer: false,
+      };
+    }
+    if (key !== 'play') return null;
+    return {
+      key,
+      label: 'Play',
+      order: -1,
+      sectionTitle: ownerTitle(project, project.sequences[sequenceIndex]),
+      value: false, // starts stopped
+      sequenceIndex,
       needsEnvelope: false,
       needsValue: null,
       applies: true,
@@ -179,12 +282,18 @@ export function resolveTarget(project, { effectId, key }) {
   }
   const modulatorIndex = project.modulators.findIndex((m) => m.id === effectId);
   if (modulatorIndex >= 0) return resolveModulatorTarget(project, project.modulators[modulatorIndex], modulatorIndex, key);
-  const effect = project.effects.find((e) => e.id === effectId);
+  const noteIndex = project.noteEffects.findIndex((e) => e.id === effectId);
+  const effect = noteIndex >= 0 ? project.noteEffects[noteIndex] : project.effects.find((e) => e.id === effectId);
   if (!effect) return null;
   const definition = EFFECT_KINDS[effect.kind];
   const common = {
     sectionTitle: ownerTitle(project, effect),
-    bindingTarget: `type="effect" level="instrument" effectTags="${effect.id}"`,
+    // Per-note effects live in every group: found by the groups' tag and
+    // their place in the chain (tested in the plugin).
+    bindingTarget:
+      noteIndex >= 0
+        ? `type="effect" level="group" groupTags="${NOTE_EFFECTS_TAG}" effectIndex="${noteIndex}"`
+        : `type="effect" level="instrument" effectTags="${effect.id}"`,
     needsEnvelope: false,
     applies: true,
   };
@@ -254,6 +363,14 @@ function availableTargets(project) {
     AMP_TARGETS.filter((t) => sectionKey({ effectId: null, key: t.key }) === section).map(({ key, label }) => ({ key, label }));
   const groups = [
     { title: SECTION_TITLES.global, effectId: null, options: options('global') },
+    {
+      title: SECTION_TITLES.glide,
+      effectId: null,
+      options: [
+        { key: 'glideMode', label: 'Glide mode menu' },
+        { key: 'monophonic', label: 'Mono/Poly button' },
+      ],
+    },
     { title: SECTION_TITLES.amp, effectId: null, options: options('amp') },
   ];
   if (usedArticulations(project).length >= 2) {
@@ -264,15 +381,17 @@ function availableTargets(project) {
     const options = mixLayers.map((n) => ({ key: `mix${n}`, label: `Mix layer ${n} (${mixLayerLabel(project, n)})` }));
     groups.push({ title: SECTION_TITLES.mixer, effectId: null, options });
   }
-  project.effects.forEach((effect, index) => {
-    const definition = EFFECT_KINDS[effect.kind];
-    const bindings = EFFECT_BINDINGS[effect.kind] ?? {};
-    const options = [{ key: 'enabled', label: 'On/off button' }];
-    for (const param of definition.params) {
-      if (bindings[param.key]) options.push({ key: param.key, label: param.label });
-    }
-    groups.push({ title: `${index + 1}. ${definition.label} (${effect.id})`, effectId: effect.id, options });
-  });
+  for (const [list, prefix] of [[project.effects, ''], [project.noteEffects, 'Per note ']]) {
+    list.forEach((effect, index) => {
+      const definition = EFFECT_KINDS[effect.kind];
+      const bindings = EFFECT_BINDINGS[effect.kind] ?? {};
+      const options = [{ key: 'enabled', label: 'On/off button' }];
+      for (const param of definition.params) {
+        if (bindings[param.key]) options.push({ key: param.key, label: param.label });
+      }
+      groups.push({ title: `${prefix}${index + 1}. ${definition.label} (${effect.id})`, effectId: effect.id, options });
+    });
+  }
   for (const modulator of project.modulators) {
     const definition = MODULATOR_KINDS[modulator.kind];
     const bindings = MODULATOR_BINDINGS[modulator.kind] ?? {};
@@ -282,11 +401,17 @@ function availableTargets(project) {
     }
     groups.push({ title: `${definition.label} (${modulator.id})`, effectId: modulator.id, options });
   }
+  if (project.sequences.length > 0) {
+    groups.push({ title: SECTION_TITLES.sequences, effectId: null, options: [{ key: 'sequenceMenu', label: 'Play menu (Off / each sequence)' }] });
+  }
+  for (const sequence of project.sequences) {
+    groups.push({ title: `${ownerTitle(project, sequence)} (${sequence.id})`, effectId: sequence.id, options: [{ key: 'play', label: 'Play button' }, { key: 'rate', label: 'Rate (steps per beat)' }] });
+  }
   return groups;
 }
 
 // Places every control. Returns { panels, fits, overlaps }. Each panel has a
-// `key` ('global', 'amp', 'articulation', 'mixer', or the effect or modulator id), its
+// `key` ('global', 'glide', 'amp', 'articulation', 'mixer', or the effect or modulator id), its
 // title, an optional on/off button (top right), an optional menu, and its
 // knobs/sliders in a row.
 //
@@ -296,8 +421,15 @@ function availableTargets(project) {
 export function layoutControls(project) {
   // First work out each panel's contents and width.
   const specs = [];
-  const owners = [...project.effects, ...project.modulators];
-  for (const section of ['global', 'amp', 'articulation', 'mixer', ...owners.map((o) => o.id)]) {
+  const owners = [...project.effects, ...project.noteEffects, ...project.modulators];
+  const sections = [
+    'global', 'glide', 'amp', 'articulation', 'mixer',
+    ...owners.map((o) => o.id),
+    'sequences',
+    ...project.sequences.map((s) => s.id),
+  ];
+  owners.push(...project.sequences);
+  for (const section of sections) {
     const controls = project.ui.controls.filter((c) => sectionKey(c) === section);
     if (controls.length === 0) continue;
     const owner = owners.find((o) => o.id === section);
@@ -438,7 +570,7 @@ export function renderControlsEditor(container, project, onChange) {
     controls.length === 0
       ? 'No controls yet. Without controls, the preset has no custom window.'
       : project.ui.positions === null
-        ? 'Controls are placed automatically: Global, Amp envelope, Articulation, Mixer, each effect in chain order, then each modulator. Drag a panel in the preview to move it.'
+        ? 'Controls are placed automatically: Global, Glide, Amp envelope, Articulation, Mixer, each effect in chain order, each modulator, then sequences. Drag a panel in the preview to move it.'
         : 'Drag a panel in the preview to move it. New panels go into the first free space.';
 
   // One row per control, in layout order.
@@ -530,7 +662,7 @@ export function addEffectControls(project, effect) {
 }
 
 export function removeArticulationMenu(project) {
-  project.ui.controls = project.ui.controls.filter((c) => c.kind !== 'menu');
+  project.ui.controls = project.ui.controls.filter((c) => c.key !== 'articulation');
 }
 
 // Adds a volume control for each mix layer in use that has none, and removes
@@ -570,8 +702,8 @@ export function removeInapplicableControls(project, owner) {
 // A new control for a setting. Its label and range start from the setting.
 function createControl(project, effectId, key) {
   const target = resolveTarget(project, { effectId, key });
-  if (key === 'enabled') return { kind: 'button', effectId, key };
-  if (key === 'articulation') return { kind: 'menu', effectId, key };
+  if (key === 'enabled' || key === 'monophonic' || key === 'play') return { kind: 'button', effectId, key };
+  if (key === 'articulation' || key === 'glideMode' || key === 'sequenceMenu') return { kind: 'menu', effectId, key };
   return {
     kind: 'knob',
     effectId,
@@ -595,7 +727,15 @@ function renderControlRow(control, panelTitle, project, rerender, redrawPreview,
   cell(`${panelTitle} › ${target ? target.label : '(missing)'}`);
 
   if (control.kind === 'button' || control.kind === 'menu') {
-    cell(control.kind === 'button' ? 'On/off button' : 'Menu (one option per articulation)');
+    const description = {
+      enabled: 'On/off button',
+      monophonic: 'Mono/Poly button',
+      articulation: 'Menu (one option per articulation)',
+      glideMode: 'Menu (Legato / Always / Off)',
+      play: 'Play button (On plays the sequence from the window, no key needed)',
+      sequenceMenu: 'Menu (Off / each sequence; plays from the window)',
+    };
+    cell(description[control.key]);
     cell('');
     cell('');
     cell('');
@@ -679,11 +819,14 @@ function drawPreview(svg, project, onDragEnd) {
       const b = panel.button;
       group.append(make('rect', { x: b.x, y: b.y, width: b.width, height: b.height, class: 'preview-control' }));
       const on = resolveTarget(project, b.control)?.value;
-      group.append(make('text', { x: b.x + b.width / 2, y: b.y + 13, class: 'preview-label' }, on ? 'On' : 'Off'));
+      const states = b.control.key === 'monophonic' ? ['Mono', 'Poly'] : ['On', 'Off'];
+      group.append(make('text', { x: b.x + b.width / 2, y: b.y + 13, class: 'preview-label' }, on ? states[0] : states[1]));
     }
     if (panel.menu) {
       const m = panel.menu;
-      const first = resolveTarget(project, m.control)?.options[0]?.name ?? '';
+      // The option it starts on: the current glide mode, or the first articulation.
+      const target = resolveTarget(project, m.control);
+      const first = (target?.options.find((o) => o.value === target.value) ?? target?.options[0])?.name ?? '';
       group.append(make('rect', { x: m.x, y: m.y, width: m.width, height: m.height, class: 'preview-control' }));
       group.append(make('text', { x: m.x + 6, y: m.y + 17, class: 'preview-title' }, `${first} ▾`));
     }

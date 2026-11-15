@@ -49,6 +49,18 @@ function withDefaults(saved) {
       controls: (saved.ui?.controls ?? []).map((c) => (c.kind === 'knob' ? { scale: 'linear', ...c } : c)),
     },
     effects: saved.effects.map((e) => ({ enabled: true, ...e })),
+    noteEffects: (saved.noteEffects ?? []).map((e) => ({ enabled: true, ...e })),
     samples: saved.samples.map((s) => ({ ...emptySample, ...s })),
+    chokedBy: saved.chokedBy ?? chokedByFromGroups(saved.chokeGroups ?? {}),
   };
+}
+
+// Files saved before one-way choking had choke groups, e.g. { HatOpen: 1,
+// HatClosed: 1 }: every name in a group cut off every name in it, itself included.
+function chokedByFromGroups(chokeGroups) {
+  const chokedBy = {};
+  for (const [name, group] of Object.entries(chokeGroups)) {
+    chokedBy[name] = Object.keys(chokeGroups).filter((other) => chokeGroups[other] === group).sort();
+  }
+  return chokedBy;
 }

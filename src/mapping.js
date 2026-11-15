@@ -196,4 +196,7 @@ export function remapName(project, name) {
 }
 
 // What a sample keeps when the folder is re-picked.
-const KEPT_FIELDS = ['rootNote', 'loNote', 'hiNote', 'loVel', 'hiVel', 'start', 'end', 'loopEnabled', 'loopStart', 'loopEnd', 'loopCrossfade'];
+const KEPT_FIELDS = [
+  'rootNote', 'loNote', 'hiNote', 'loVel', 'hiVel', 'start', 'end',
+  'loopEnabled', 'loopStart', 'loopEnd', 'loopCrossfade', 'volumeDb', 'pan', 'tuning',
+];

@@ -11,6 +11,7 @@ import { renderReleaseEditor } from './release.js';
 import { renderChokeEditor } from './choke.js';
 import { renderKeyswitchEditor } from './keyswitch.js';
 import { renderMixLayerEditor } from './mixlayer.js';
+import { renderSequencesEditor } from './sequences.js';
 import { renderEffectsEditor } from './effects.js';
 import { renderModulatorsEditor } from './modulators.js';
 import { addControl, renderControlsEditor } from './ui.js';
@@ -52,6 +53,10 @@ const envelopeSection = document.querySelector('#envelope-section');
 const envelopeContainer = document.querySelector('#envelope');
 const effectsSection = document.querySelector('#effects-section');
 const effectsContainer = document.querySelector('#effects');
+const noteEffectsSection = document.querySelector('#note-effects-section');
+const noteEffectsContainer = document.querySelector('#note-effects');
+const sequencesSection = document.querySelector('#sequences-section');
+const sequencesContainer = document.querySelector('#sequences');
 const modulatorsSection = document.querySelector('#modulators-section');
 const modulatorsContainer = document.querySelector('#modulators');
 const controlsSection = document.querySelector('#controls-section');
@@ -82,10 +87,14 @@ pickButton.addEventListener('click', async () => {
     project.velocityTracking = previous.velocityTracking;
     project.globalTuning = previous.globalTuning;
     project.globalPan = previous.globalPan;
+    project.glideTime = previous.glideTime;
+    project.glideMode = previous.glideMode;
+    project.monophonic = previous.monophonic;
     project.releaseNames = previous.releaseNames;
     project.releaseDecay = previous.releaseDecay;
     project.releaseIgnoresEnvelope = previous.releaseIgnoresEnvelope;
-    project.chokeGroups = previous.chokeGroups;
+    project.chokedBy = previous.chokedBy;
+    project.voiceLimits = previous.voiceLimits;
     project.chokeMode = previous.chokeMode;
     project.chokeDecay = previous.chokeDecay;
     project.articulations = previous.articulations;
@@ -96,8 +105,12 @@ pickButton.addEventListener('click', async () => {
     project.ui = previous.ui;
     project.effects = previous.effects;
     project.nextEffectNumber = previous.nextEffectNumber;
+    project.noteEffects = previous.noteEffects;
+    project.nextNoteEffectNumber = previous.nextNoteEffectNumber;
     project.modulators = previous.modulators;
     project.nextModulatorNumber = previous.nextModulatorNumber;
+    project.sequences = previous.sequences;
+    project.nextSequenceNumber = previous.nextSequenceNumber;
   } else {
     addControl(project, null, 'volume'); // a new instrument starts with a Volume control
   }
@@ -254,6 +267,12 @@ function render() {
   // Effect changes also change what controls can target, so redraw those too.
   renderEffectsEditor(effectsContainer, project, renderInstrument);
   effectsSection.hidden = false;
+  renderEffectsEditor(noteEffectsContainer, project, renderInstrument, true);
+  noteEffectsSection.hidden = false;
+  // Sequence names are panel titles and removing one removes its controls,
+  // so the Controls section is redrawn too.
+  renderSequencesEditor(sequencesContainer, project, renderControlsAndExport);
+  sequencesSection.hidden = false;
   // Modulator changes add, remove or restart controls, so redraw those too.
   renderModulatorsEditor(modulatorsContainer, project, renderControlsAndExport);
   modulatorsSection.hidden = false;

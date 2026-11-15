@@ -1,6 +1,8 @@
-// The Choke groups section: which sample names cut each other off (docs:
-// tags, silencedByTags), and how a cut-off sample stops (docs: silencingMode,
-// silencingDecay). Checks on the values happen in export.js (checkPreset).
+// The Choke section: which sample names cut each name off (docs: tags,
+// silencedByTags; one-way is allowed, and a name can cut off its own previous
+// hit), each name's voice limit (docs: polyphony on <tag>), and how a cut-off
+// sample stops (docs: silencingMode, silencingDecay). Checks on the values
+// happen in export.js (checkPreset).
 
 import { isExportable } from './mapping.js';
 
@@ -16,30 +18,58 @@ export function renderChokeEditor(container, project, onChange) {
   const rerender = () => renderChokeEditor(container, project, onChange);
   const names = [...new Set(project.samples.filter(isExportable).map((s) => s.name))].sort();
 
-  // One dropdown per name: none, or group 1 up to one group per name.
-  const list = document.createElement('p');
+  // One row per name: the names that cut it off, then its voice limit.
+  const table = document.createElement('table');
+  table.className = 'loop-table';
   for (const name of names) {
-    const label = document.createElement('label');
-    label.className = 'inline-option';
-    const select = document.createElement('select');
-    for (let group = 0; group <= names.length; group++) {
-      const option = document.createElement('option');
-      option.value = group;
-      option.textContent = group === 0 ? 'none' : `group ${group}`;
-      select.append(option);
+    const row = document.createElement('tr');
+    const title = document.createElement('td');
+    const strong = document.createElement('strong');
+    strong.textContent = name;
+    title.append(strong, ' is cut off by:');
+    row.append(title);
+
+    const boxes = document.createElement('td');
+    for (const other of names) {
+      const label = document.createElement('label');
+      label.className = 'inline-option';
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.checked = (project.chokedBy[name] ?? []).includes(other);
+      box.addEventListener('change', () => {
+        const list = (project.chokedBy[name] ?? []).filter((n) => n !== other);
+        if (box.checked) list.push(other);
+        if (list.length > 0) project.chokedBy[name] = list.sort();
+        else delete project.chokedBy[name];
+        onChange();
+      });
+      label.append(box, ` ${other === name ? `${other} (itself)` : other}`);
+      boxes.append(label);
     }
-    select.value = project.chokeGroups[name] ?? 0;
-    select.addEventListener('change', () => {
-      const group = Number(select.value);
-      if (group === 0) delete project.chokeGroups[name];
-      else project.chokeGroups[name] = group;
+    row.append(boxes);
+
+    const limitCell = document.createElement('td');
+    const limit = document.createElement('input');
+    limit.type = 'number';
+    limit.min = 1;
+    limit.step = 1;
+    limit.className = 'envelope-input';
+    limit.placeholder = 'none';
+    limit.value = project.voiceLimits[name] ?? '';
+    // "input" fires on every keystroke, so the XML updates as you type.
+    limit.addEventListener('input', () => {
+      if (limit.value === '') delete project.voiceLimits[name];
+      else project.voiceLimits[name] = Number(limit.value);
       onChange();
     });
-    label.append(`${name} `, select);
-    list.append(label);
+    const limitLabel = document.createElement('label');
+    limitLabel.append('Voice limit ', limit);
+    limitCell.append(limitLabel);
+    row.append(limitCell);
+    table.append(row);
   }
 
-  // How cut-off samples stop: one setting for all of them.
+  // How cut-off samples (and ones over their voice limit) stop: one setting for all of them.
   const modeRow = document.createElement('p');
   modeRow.append('When cut off, stop: ');
   for (const [mode, text] of MODES) {
@@ -72,5 +102,5 @@ export function renderChokeEditor(container, project, onChange) {
     modeRow.append(label);
   }
 
-  container.replaceChildren(list, modeRow);
+  container.replaceChildren(table, modeRow);
 }

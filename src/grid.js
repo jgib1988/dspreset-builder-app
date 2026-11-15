@@ -17,6 +17,7 @@
 import { articulationOf, getZones, isRelease, mixLayerLabel, mixLayerOf, zoneKey } from './mapping.js';
 import { midiToNoteName } from './filename.js';
 import { renderLoopEditor } from './loops.js';
+import { renderLevelEditor } from './levels.js';
 import { findWarnings } from './validate.js';
 
 // Sizes in SVG units. The whole drawing is scaled to fit the page width.
@@ -401,7 +402,9 @@ function renderDetails(details, zone, onRootChange, onLoopChange) {
 
   const loopBox = document.createElement('div');
   renderLoopEditor(loopBox, zone, onLoopChange);
-  details.replaceChildren(line, loopBox);
+  const levelBox = document.createElement('div');
+  renderLevelEditor(levelBox, zone, onLoopChange);
+  details.replaceChildren(line, loopBox, levelBox);
 }
 
 function noteLabel(note) {

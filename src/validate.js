@@ -28,6 +28,7 @@ export function findWarnings(project) {
     ...findDuplicateRoundRobins(project),
     ...findRootsOutside(zones),
     ...findMixedFormats(project),
+    ...findSequenceWarnings(project, zones),
   ];
   return { messages, overlapping };
 }
@@ -108,6 +109,42 @@ function findKeyswitchesOnZones(project, zones) {
       );
     }
   }
+  return messages;
+}
+
+// Sequence trigger keys are swallowed (they start the sequence instead of
+// playing), so they shouldn't cover samples, keyswitches or another
+// sequence's keys. Also: empty sequences, and notes no sample plays.
+function findSequenceWarnings(project, zones) {
+  const messages = [];
+  const isNote = (n) => Number.isInteger(n) && n >= 0 && n <= 127;
+  const triggers = project.sequences.filter(
+    (s) => isNote(s.triggerLow) && isNote(s.triggerHigh) && s.triggerLow <= s.triggerHigh,
+  );
+  const mapped = (n) => zones.some(([s]) => s.loNote <= n && n <= s.hiNote);
+  for (const sequence of project.sequences) {
+    const name = `Sequence "${sequence.name}"`;
+    if (sequence.notes.length === 0) messages.push(`${name} has no notes`);
+    const unmapped = [...new Set(sequence.notes.map((n) => n.note))].filter((n) => !mapped(n));
+    if (unmapped.length > 0) {
+      messages.push(`${name} has notes no sample plays: ${unmapped.sort((a, b) => a - b).map(note).join(', ')} (transposed by the trigger key, they may still land on samples)`);
+    }
+  }
+  triggers.forEach((sequence, i) => {
+    const { triggerLow: lo, triggerHigh: hi } = sequence;
+    const name = `Sequence "${sequence.name}" trigger ${keys(lo, hi)}`;
+    const covering = zones.filter(([s]) => s.loNote <= hi && lo <= s.hiNote);
+    if (covering.length > 0) {
+      messages.push(`${name} overlap ${covering.map(([s]) => zoneName(s)).join(', ')}: those keys will start the sequence instead of playing`);
+    }
+    for (const articulation of usedArticulations(project)) {
+      const ks = project.keyswitches[articulation];
+      if (Number.isInteger(ks) && lo <= ks && ks <= hi) messages.push(`${name} include the keyswitch for articulation ${articulation}`);
+    }
+    for (const other of triggers.slice(i + 1)) {
+      if (other.triggerLow <= hi && lo <= other.triggerHigh) messages.push(`${name} overlap Sequence "${other.name}"'s trigger keys`);
+    }
+  });
   return messages;
 }
 

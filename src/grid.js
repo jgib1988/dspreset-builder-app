@@ -10,10 +10,11 @@
 // Drawn as SVG: every zone is a real element the browser can click and drag,
 // and it scales to the page width via the viewBox.
 //
-// Release samples and other articulations cover the same keys as the normal
-// ones, so the grid shows one articulation and kind at a time, picked above it.
+// Release samples, other articulations and mix layers cover the same keys as
+// the normal ones, so the grid shows one articulation, mix layer and kind at a
+// time, picked above it.
 
-import { articulationOf, getZones, isRelease, zoneKey } from './mapping.js';
+import { articulationOf, getZones, isRelease, mixLayerLabel, mixLayerOf, zoneKey } from './mapping.js';
 import { midiToNoteName } from './filename.js';
 import { renderLoopEditor } from './loops.js';
 import { findWarnings } from './validate.js';
@@ -37,9 +38,10 @@ const LAYER_COLORS = ['#4e79a7', '#f28e2b', '#59a14f', '#e15759', '#b07aa1', '#7
 let selectedKey = null;
 
 // Whether the grid shows release samples (true) or normal ones, and which
-// articulation (0 = none). Screen-only.
+// articulation and mix layer (0 = none). Screen-only.
 let showRelease = false;
 let showArticulation = 0;
+let showMixLayer = 0;
 
 // `onChange` is called after the user edits a zone, so the rest of the page
 // (table, XML preview, export) can update. `onLoopChange` is called after a
@@ -51,8 +53,13 @@ export function renderGrid(container, details, project, onChange, onLoopChange) 
   if (!hasRelease) showRelease = false;
   const articulations = [...new Set(allZones.map((zone) => articulationOf(project, zone[0])))].sort((a, b) => a - b);
   if (!articulations.includes(showArticulation)) showArticulation = articulations[0] ?? 0;
+  const mixLayers = [...new Set(allZones.map((zone) => mixLayerOf(project, zone[0])))].sort((a, b) => a - b);
+  if (!mixLayers.includes(showMixLayer)) showMixLayer = mixLayers[0] ?? 0;
   const zones = allZones.filter(
-    (zone) => isRelease(project, zone[0]) === showRelease && articulationOf(project, zone[0]) === showArticulation,
+    (zone) =>
+      isRelease(project, zone[0]) === showRelease &&
+      articulationOf(project, zone[0]) === showArticulation &&
+      mixLayerOf(project, zone[0]) === showMixLayer,
   );
   const layers = [...new Set(zones.map((zone) => zone[0].velocityLayer))].sort((a, b) => a - b);
   const isSelected = (zone) => zoneKey(zone[0]) === selectedKey;
@@ -84,6 +91,7 @@ export function renderGrid(container, details, project, onChange, onLoopChange) 
 
   const pickers = [];
   if (articulations.length > 1) pickers.push(articulationPicker(project, articulations, redraw));
+  if (mixLayers.length > 1) pickers.push(mixLayerPicker(project, mixLayers, redraw));
   if (hasRelease) pickers.push(kindPicker(redraw));
   container.replaceChildren(...pickers, svg);
   renderDetails(
@@ -119,6 +127,27 @@ function articulationPicker(project, articulations, redraw) {
     redraw();
   });
   bar.append('Articulation: ', select);
+  return bar;
+}
+
+// A dropdown of the mix layers that have samples (0 = no mix layer).
+function mixLayerPicker(project, mixLayers, redraw) {
+  const bar = document.createElement('p');
+  bar.className = 'grid-kind';
+  const select = document.createElement('select');
+  for (const mixLayer of mixLayers) {
+    const option = document.createElement('option');
+    option.value = mixLayer;
+    option.textContent = mixLayer === 0 ? 'No mix layer' : `Mix layer ${mixLayer} (${mixLayerLabel(project, mixLayer)})`;
+    select.append(option);
+  }
+  select.value = showMixLayer;
+  select.addEventListener('change', () => {
+    showMixLayer = Number(select.value);
+    selectedKey = null;
+    redraw();
+  });
+  bar.append('Mix layer: ', select);
   return bar;
 }
 

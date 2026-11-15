@@ -1,16 +1,16 @@
-// The Controls section: knobs, sliders, on/off buttons and the articulation
-// menu shown in Decent Sampler's own window (docs: "The <ui> element"), each
+// The Controls section: knobs, sliders, on/off buttons, the articulation
+// menu and mix layer volumes shown in Decent Sampler's own window (docs: "The <ui> element"), each
 // bound to a setting (docs: "Appendix B: The <binding> element"). Settings
 // are instrument-wide ones, effect parameters and modulator settings.
 //
 // A control stores only what it targets and how it looks. Its starting value
 // is read from the setting it controls, so the project stays the single
 // source of truth. Controls are placed automatically (layoutControls):
-// Global, Amp envelope and Articulation panels first, then one panel per
-// effect in chain order, then one per modulator.
+// Global, Amp envelope, Articulation and Mixer panels first, then one panel
+// per effect in chain order, then one per modulator.
 
 import { EFFECT_BINDINGS, EFFECT_KINDS, visibleParams } from './effects.js';
-import { articulationLabel, usedArticulations } from './mapping.js';
+import { articulationLabel, mixLayerLabel, mixLayerVolume, usedArticulations, usedMixLayers } from './mapping.js';
 import { MODULATOR_BINDINGS, MODULATOR_KINDS, visibleFields } from './modulators.js';
 
 // The docs' recommended window size.
@@ -76,10 +76,11 @@ const INSTRUMENT_SETTINGS = {
 
 // Panels for controls with effectId null. A control's panel is its effect's
 // id, or one of these.
-const SECTION_TITLES = { global: 'Global', amp: 'Amp envelope', articulation: 'Articulation' };
+const SECTION_TITLES = { global: 'Global', amp: 'Amp envelope', articulation: 'Articulation', mixer: 'Mixer' };
 function sectionKey({ effectId, key }) {
   if (effectId !== null) return effectId;
   if (key === 'articulation') return 'articulation';
+  if (mixLayerNumber(key) !== null) return 'mixer';
   return key in INSTRUMENT_SETTINGS ? 'global' : 'amp';
 }
 
@@ -101,6 +102,13 @@ const PANEL_HEIGHT = PAD + TITLE_HEIGHT + ROW_HEIGHT + PAD;
 const BUTTON = { width: 50, height: 18 };
 const MENU = { width: 160, height: 26 };
 const SNAP = 8; // dragged panels snap to this grid
+
+// A mix layer volume control's key is 'mix' and the layer number, e.g.
+// 'mix2'. Returns the number, or null for other keys.
+function mixLayerNumber(key) {
+  const match = /^mix(\d+)$/.exec(key);
+  return match ? Number(match[1]) : null;
+}
 
 // The name shown for an effect or modulator, in the plugin's panels and in
 // the app: its kind, numbered when there are several of the same kind
@@ -129,6 +137,27 @@ export function resolveTarget(project, { effectId, key }) {
       needsEnvelope: false,
       needsValue: null,
       applies: true,
+    };
+  }
+  // A mix layer's volume (docs: TAG_VOLUME, 0–1). Only there while the
+  // layer has samples.
+  const mixLayer = effectId === null ? mixLayerNumber(key) : null;
+  if (mixLayer !== null) {
+    if (!usedMixLayers(project).includes(mixLayer)) return null;
+    return {
+      key,
+      label: mixLayerLabel(project, mixLayer),
+      order: mixLayer,
+      sectionTitle: SECTION_TITLES.mixer,
+      value: mixLayerVolume(project, mixLayer),
+      bindingTarget: `type="amp" level="tag" identifier="${key}"`,
+      parameter: 'TAG_VOLUME',
+      range: [0, 1],
+      valid: [0, 1],
+      needsEnvelope: false,
+      needsValue: null,
+      applies: true,
+      integer: false,
     };
   }
   if (effectId === null) {
@@ -230,6 +259,11 @@ function availableTargets(project) {
   if (usedArticulations(project).length >= 2) {
     groups.push({ title: SECTION_TITLES.articulation, effectId: null, options: [{ key: 'articulation', label: 'Menu' }] });
   }
+  const mixLayers = usedMixLayers(project);
+  if (mixLayers.length > 0) {
+    const options = mixLayers.map((n) => ({ key: `mix${n}`, label: `Mix layer ${n} (${mixLayerLabel(project, n)})` }));
+    groups.push({ title: SECTION_TITLES.mixer, effectId: null, options });
+  }
   project.effects.forEach((effect, index) => {
     const definition = EFFECT_KINDS[effect.kind];
     const bindings = EFFECT_BINDINGS[effect.kind] ?? {};
@@ -252,7 +286,7 @@ function availableTargets(project) {
 }
 
 // Places every control. Returns { panels, fits, overlaps }. Each panel has a
-// `key` ('global', 'amp', 'articulation', or the effect or modulator id), its
+// `key` ('global', 'amp', 'articulation', 'mixer', or the effect or modulator id), its
 // title, an optional on/off button (top right), an optional menu, and its
 // knobs/sliders in a row.
 //
@@ -263,7 +297,7 @@ export function layoutControls(project) {
   // First work out each panel's contents and width.
   const specs = [];
   const owners = [...project.effects, ...project.modulators];
-  for (const section of ['global', 'amp', 'articulation', ...owners.map((o) => o.id)]) {
+  for (const section of ['global', 'amp', 'articulation', 'mixer', ...owners.map((o) => o.id)]) {
     const controls = project.ui.controls.filter((c) => sectionKey(c) === section);
     if (controls.length === 0) continue;
     const owner = owners.find((o) => o.id === section);
@@ -404,7 +438,7 @@ export function renderControlsEditor(container, project, onChange) {
     controls.length === 0
       ? 'No controls yet. Without controls, the preset has no custom window.'
       : project.ui.positions === null
-        ? 'Controls are placed automatically: Global, Amp envelope, Articulation, each effect in chain order, then each modulator. Drag a panel in the preview to move it.'
+        ? 'Controls are placed automatically: Global, Amp envelope, Articulation, Mixer, each effect in chain order, then each modulator. Drag a panel in the preview to move it.'
         : 'Drag a panel in the preview to move it. New panels go into the first free space.';
 
   // One row per control, in layout order.
@@ -467,7 +501,9 @@ export function renderControlsEditor(container, project, onChange) {
 //   only from the Add menu); unticking removes all envelope controls;
 // - a new project starts with a Volume control;
 // - a second articulation (key switching) adds the articulation menu, and
-//   going back to fewer than two removes it.
+//   going back to fewer than two removes it;
+// - a new mix layer adds its volume control, and a mix layer with no
+//   samples left loses it.
 // Controls that stop applying (e.g. resonance on lowpass_1pl) are removed.
 const AUTO_ENVELOPE_KEYS = ['attack', 'decay', 'sustain', 'release'];
 const AUTO_MODULATOR_KEYS = {
@@ -495,6 +531,17 @@ export function addEffectControls(project, effect) {
 
 export function removeArticulationMenu(project) {
   project.ui.controls = project.ui.controls.filter((c) => c.kind !== 'menu');
+}
+
+// Adds a volume control for each mix layer in use that has none, and removes
+// those of mix layers no longer in use.
+export function updateMixerControls(project) {
+  const used = usedMixLayers(project);
+  project.ui.controls = project.ui.controls.filter((c) => {
+    const mixLayer = c.effectId === null ? mixLayerNumber(c.key) : null;
+    return mixLayer === null || used.includes(mixLayer);
+  });
+  for (const mixLayer of used) addControl(project, null, `mix${mixLayer}`);
 }
 
 export function addModulatorControls(project, modulator) {

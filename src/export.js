@@ -20,8 +20,12 @@
 // on every articulation. All but the first articulation start off through
 // <tags><tag enabled="false">: enabled="false" on the group (as in the docs'
 // example) can't be turned back on by TAG_ENABLED (tested in the plugin).
+//
+// Mix layers get their own groups too, tagged mixN (a group can carry two
+// tags, e.g. tags="art1,mix2"; tested in the plugin). A starting volume
+// other than 1 goes on <tags><tag volume>; Mixer knobs use TAG_VOLUME.
 
-import { articulationOf, getZones, isExportable, isRelease, usedArticulations } from './mapping.js';
+import { articulationOf, getZones, isExportable, isRelease, mixLayerOf, mixLayerVolume, usedArticulations, usedMixLayers } from './mapping.js';
 import { midiToNoteName } from './filename.js';
 import { CURVE_DEFAULTS } from './project.js';
 import { EFFECT_KINDS, isImpulseResponseFile, visibleParams } from './effects.js';
@@ -42,31 +46,41 @@ export function buildPresetXml(project) {
   // The window with controls. Left out when there are none.
   if (project.ui.controls.length > 0) lines.push(...uiLines(project));
   const articulations = usedArticulations(project);
-  if (articulations.length > 1) {
-    lines.push('  <tags>');
-    for (const articulation of articulations.slice(1)) lines.push(`    <tag name="art${articulation}" enabled="false"/>`);
-    lines.push('  </tags>');
-  }
+  const mixLayers = usedMixLayers(project);
+  // Tags that don't start with the defaults (enabled, volume 1).
+  const tagLines = [
+    ...articulations.slice(1).map((articulation) => `    <tag name="art${articulation}" enabled="false"/>`),
+    ...mixLayers
+      .filter((mixLayer) => mixLayerVolume(project, mixLayer) !== 1)
+      .map((mixLayer) => `    <tag name="mix${mixLayer}" volume="${mixLayerVolume(project, mixLayer)}"/>`),
+  ];
+  if (tagLines.length > 0) lines.push('  <tags>', ...tagLines, '  </tags>');
   lines.push(`  <groups${groupsAttributes(project, usesRoundRobin)}>`);
   const releaseAttributes =
     ' trigger="release"' +
     (project.releaseDecay !== null ? ` releaseTriggerDecay="${project.releaseDecay}dB"` : '') +
     (project.releaseIgnoresEnvelope ? ' ampEnvEnabled="false"' : '');
   // Normal groups, then release groups; within each, no articulation first,
-  // then articulations in order.
+  // then articulations in order, and within those, no mix layer first, then
+  // mix layers in order.
   const groups = [];
   for (const release of [false, true]) {
     for (const articulation of [0, ...articulations]) {
-      const inSet = zones.filter(
-        (zone) => isRelease(project, zone[0]) === release && articulationOf(project, zone[0]) === articulation,
-      );
-      let suffix = release ? ' release' : '';
-      let attributes = release ? releaseAttributes : '';
-      if (articulation > 0) {
-        suffix = ` art${articulation}${suffix}`;
-        attributes = ` tags="art${articulation}"${attributes}`;
+      for (const mixLayer of [0, ...mixLayers]) {
+        const inSet = zones.filter(
+          (zone) =>
+            isRelease(project, zone[0]) === release &&
+            articulationOf(project, zone[0]) === articulation &&
+            mixLayerOf(project, zone[0]) === mixLayer,
+        );
+        // e.g. names "v1 art2 mix1 release", tags "art2,mix1".
+        const tags = [];
+        if (articulation > 0) tags.push(`art${articulation}`);
+        if (mixLayer > 0) tags.push(`mix${mixLayer}`);
+        const suffix = tags.map((tag) => ` ${tag}`).join('') + (release ? ' release' : '');
+        const attributes = (tags.length > 0 ? ` tags="${tags.join(',')}"` : '') + (release ? releaseAttributes : '');
+        groups.push(...layerGroups(inSet, suffix, attributes));
       }
-      groups.push(...layerGroups(inSet, suffix, attributes));
     }
   }
   for (const { name, attributes, zones: inLayer } of groups) {
@@ -368,6 +382,7 @@ export function checkPreset(project, xml) {
     problems.push('Choke fade must be a number of seconds, above 0');
   }
   problems.push(...checkKeyswitches(project));
+  problems.push(...checkMixLayerVolumes(project));
   problems.push(...checkModulators(project));
   if (project.envelope.enabled) problems.push(...checkEnvelope(project.envelope));
   project.effects.forEach((effect, index) => {
@@ -493,6 +508,15 @@ function checkModulators(project) {
 }
 
 // Each articulation in use needs its own keyswitch note, 0–127.
+function checkMixLayerVolumes(project) {
+  return usedMixLayers(project)
+    .filter((mixLayer) => {
+      const volume = mixLayerVolume(project, mixLayer);
+      return !Number.isFinite(volume) || volume < 0 || volume > 1;
+    })
+    .map((mixLayer) => `Mix layer ${mixLayer} volume must be a number from 0 to 1`);
+}
+
 function checkKeyswitches(project) {
   const problems = [];
   const seen = new Map();

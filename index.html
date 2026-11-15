@@ -33,6 +33,7 @@
     <ul>
       <li>Presets need <strong>Decent Sampler 1.34.0 or later</strong>. Some effects, such as the filter types, behave differently in older versions.</li>
       <li><strong>Chrome or Edge</strong> give the best folder picker. Other browsers work too, but the folder dialog looks different.</li>
+      <li><strong>Mix layers</strong> play several sample names together on the same keys (e.g. close and room mics), each with its own volume knob in the plugin's Mixer panel.</li>
       <li><strong>Save project</strong> keeps your work as a .json file. To carry on later, load it, then pick the sample folder again.</li>
     </ul>
   </details>
@@ -71,6 +72,15 @@
       switches to it (the key itself doesn't play). Each articulation gets its own mapping: pick it above the grid.
     </p>
     <div id="keyswitch"></div>
+  </section>
+
+  <section id="mixlayer-section" hidden>
+    <h2>Mix layers</h2>
+    <p class="hint">
+      Give sample names a mix layer to play them together on the same keys, e.g. close and room mics.
+      Each mix layer gets its own mapping: pick it above the grid.
+    </p>
+    <div id="mixlayer"></div>
   </section>
 
   <section id="choke-section" hidden>

@@ -31,10 +31,34 @@ export function articulationLabel(project, articulation) {
   return [...new Set(names)].sort().join(' / ');
 }
 
-// Samples that are mapped together: the same articulation, and both normal or
-// both release. Different sets normally cover the same keys on purpose.
+// The sample's mix layer number, or 0 for none. Mix layers play together on
+// the same keys (e.g. close and room mics), each with its own volume.
+export function mixLayerOf(project, sample) {
+  return project.mixLayers?.[sample.name] ?? 0;
+}
+
+// The mix layer numbers in use, lowest first.
+export function usedMixLayers(project) {
+  const used = project.samples.filter(isExportable).map((s) => mixLayerOf(project, s));
+  return [...new Set(used)].filter((n) => n > 0).sort((a, b) => a - b);
+}
+
+// A mix layer's starting volume, 0–1 (null while its box is blank).
+export function mixLayerVolume(project, mixLayer) {
+  const volume = project.mixLayerVolumes?.[mixLayer];
+  return volume === undefined ? 1 : volume;
+}
+
+// A mix layer's name for labels: its sample names, e.g. "Close" or "Close / CloseRel".
+export function mixLayerLabel(project, mixLayer) {
+  const names = project.samples.filter((s) => isExportable(s) && mixLayerOf(project, s) === mixLayer).map((s) => s.name);
+  return [...new Set(names)].sort().join(' / ');
+}
+
+// Samples that are mapped together: the same articulation and mix layer, and
+// both normal or both release. Different sets normally cover the same keys on purpose.
 export function mappingSet(project, sample) {
-  return `${articulationOf(project, sample)}|${isRelease(project, sample)}`;
+  return `${articulationOf(project, sample)}|${mixLayerOf(project, sample)}|${isRelease(project, sample)}`;
 }
 
 // A "zone" is a set of round-robin variations of one sound: samples with the
@@ -159,7 +183,7 @@ export function mergeSamples(project, previousSamples) {
 }
 
 // After a name is marked or unmarked as release samples, or its articulation
-// changes (so it's in a different mapping set): gives that name's samples
+// or mix layer changes (so it's in a different mapping set): gives that name's samples
 // the ranges auto-map would give them now, leaving every other zone (and
 // root notes) as they are.
 export function remapName(project, name) {

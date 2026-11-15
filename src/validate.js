@@ -10,7 +10,7 @@ import { midiToNoteName } from './filename.js';
 // keys that overlap another zone (the grid outlines them).
 export function findWarnings(project) {
   const zones = getZones(project).filter((zone) => hasValidRanges(zone[0]));
-  // Release samples and other articulations are meant to share keys, so
+  // Release samples, other articulations and mix layers are meant to share keys, so
   // overlaps are only looked for within each mapping set, and gaps only
   // within each set of normal samples.
   const sets = new Map();

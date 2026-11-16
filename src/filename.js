@@ -36,7 +36,7 @@ export function parseFilename(path) {
 }
 
 // "C3" -> 60, "F#2" -> 54, "Bb1" -> 46, "C-2" -> 0, "60" -> 60
-function parseNote(text) {
+export function parseNote(text) {
   let midi;
   if (/^\d+$/.test(text)) {
     midi = Number(text);

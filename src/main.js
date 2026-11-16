@@ -18,6 +18,7 @@ import { renderModulatorsEditor } from './modulators.js';
 import { addControl, renderControlsEditor } from './ui.js';
 import { projectFromJson, projectToJson } from './save.js';
 import { findWarnings } from './validate.js';
+import { appendParseCells } from './assign.js';
 import { clearWaveformCache, setAudioFiles } from './waveform.js';
 
 let project = null;
@@ -335,14 +336,9 @@ function renderRow(sample) {
   const row = document.createElement('tr');
   addCell(row, sample.path);
 
-  if (sample.parseError !== null) {
-    addCell(row, sample.parseError, 'problem', 4);
-  } else {
-    addCell(row, sample.name);
-    addCell(row, `${midiToNoteName(sample.rootNote)} (${sample.rootNote})`);
-    addCell(row, sample.velocityLayer, 'number');
-    addCell(row, sample.roundRobin, 'number');
-  }
+  // Name, note, layer and round-robin, or why the filename didn't parse
+  // (with an Assign button to set them by hand).
+  appendParseCells(row, sample, project, render);
 
   addCell(row, formatSize(sample.sizeBytes), 'number');
 

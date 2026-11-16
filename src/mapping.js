@@ -159,6 +159,8 @@ export function mergeSamples(project, previousSamples) {
   for (const sample of project.samples) {
     const old = previous.get(sample.path);
     if (old) {
+      // Values set by hand replace what the filename gave (usually nothing).
+      if (old.manual) for (const key of MANUAL_FIELDS) sample[key] = old[key];
       for (const key of KEPT_FIELDS) sample[key] = old[key];
       if (isExportable(sample)) kept.set(zoneKey(sample), sample);
     } else {
@@ -166,18 +168,7 @@ export function mergeSamples(project, previousSamples) {
     }
   }
 
-  // Where auto-map would put everything, worked out on copies so nothing
-  // already mapped changes.
-  const copies = project.samples.map((s) => ({ ...s }));
-  autoMap({ ...project, samples: copies });
-
-  const newZones = new Set();
-  for (const sample of added.filter(isExportable)) {
-    const existing = kept.get(zoneKey(sample));
-    const source = existing ?? copies[project.samples.indexOf(sample)];
-    for (const key of ['rootNote', 'loNote', 'hiNote', 'loVel', 'hiVel']) sample[key] = source[key];
-    if (!existing) newZones.add(zoneKey(sample));
-  }
+  const newZones = placeSamples(project, added, kept);
 
   const paths = new Set(project.samples.map((s) => s.path));
   return {
@@ -186,6 +177,32 @@ export function mergeSamples(project, previousSamples) {
     newZones: [...newZones],
     removed: previousSamples.filter((s) => !paths.has(s.path)).map((s) => s.path),
   };
+}
+
+// Places samples that have just become exportable (new on a re-pick, or
+// assigned by hand): one whose zone already has samples joins it with that
+// zone's ranges and root note; one in a new zone gets the ranges auto-map
+// would give it, leaving every other zone alone (so it may overlap them).
+// `existing` maps zone keys to a sample already placed there; by default,
+// every other exportable sample. Returns the keys of the new zones.
+export function placeSamples(project, samples, existing = null) {
+  if (existing === null) {
+    existing = new Map();
+    for (const s of project.samples) if (isExportable(s) && !samples.includes(s)) existing.set(zoneKey(s), s);
+  }
+  // Where auto-map would put everything, worked out on copies so nothing
+  // already mapped changes.
+  const copies = project.samples.map((s) => ({ ...s }));
+  autoMap({ ...project, samples: copies });
+
+  const newZones = new Set();
+  for (const sample of samples.filter(isExportable)) {
+    const zone = existing.get(zoneKey(sample));
+    const source = zone ?? copies[project.samples.indexOf(sample)];
+    for (const key of ['rootNote', 'loNote', 'hiNote', 'loVel', 'hiVel']) sample[key] = source[key];
+    if (!zone) newZones.add(zoneKey(sample));
+  }
+  return [...newZones];
 }
 
 // After a name is marked or unmarked as release samples, or its articulation
@@ -200,6 +217,9 @@ export function remapName(project, name) {
     for (const key of ['loNote', 'hiNote', 'loVel', 'hiVel']) sample[key] = copies[i][key];
   });
 }
+
+// What a sample set by hand keeps when the folder is re-picked.
+const MANUAL_FIELDS = ['name', 'fileNote', 'velocityLayer', 'roundRobin', 'parseError', 'manual'];
 
 // What a sample keeps when the folder is re-picked.
 const KEPT_FIELDS = [

@@ -128,6 +128,9 @@ export function createSample({ path, sizeBytes, info, readError, parsed, parseEr
     velocityLayer: parsed ? parsed.velocityLayer : null,
     roundRobin: parsed ? parsed.roundRobin : null,
     parseError,
+    // true when name, note, layer and round-robin were set by hand in the
+    // file table (assign.js) because the filename didn't match the format.
+    manual: false,
     // Key and velocity ranges, set by autoMap (mapping.js).
     loNote: null,
     hiNote: null,

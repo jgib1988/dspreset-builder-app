@@ -420,3 +420,74 @@ td.muted {
   cursor: pointer;
   font-weight: bold;
 }
+
+/* Pick folder / Save / Load / Export buttons */
+.top-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Tabs (src/layout.js). They stay at the top of the window while scrolling,
+   so another tab is always one click away. */
+#tabs {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px 0 0;
+  margin-bottom: 1rem;
+  background: #fff;
+  border-bottom: 2px solid #4e79a7;
+}
+
+#tabs button {
+  border: 1px solid #ccc;
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  padding: 6px 14px;
+  background: #f2f2f2;
+  font: inherit;
+  cursor: pointer;
+}
+
+#tabs button.active {
+  background: #4e79a7;
+  border-color: #4e79a7;
+  color: #fff;
+}
+
+#export-count {
+  color: #b00020;
+  font-weight: bold;
+}
+
+#tabs button.active #export-count {
+  color: #fff;
+}
+
+/* Foldable sections: the heading is the <summary>, with an arrow before it. */
+details.fold > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+details.fold > summary::-webkit-details-marker {
+  display: none; /* Safari's own arrow */
+}
+
+details.fold > summary h2 {
+  display: inline-block;
+}
+
+details.fold > summary::before {
+  content: '▸ ';
+  font-size: 1.5rem;
+  color: #666;
+}
+
+details.fold[open] > summary::before {
+  content: '▾ ';
+}

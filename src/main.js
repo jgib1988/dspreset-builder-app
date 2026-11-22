@@ -20,6 +20,9 @@ import { projectFromJson, projectToJson } from './save.js';
 import { findWarnings } from './validate.js';
 import { appendParseCells } from './assign.js';
 import { clearWaveformCache, setAudioFiles } from './waveform.js';
+import { setUpLayout } from './layout.js';
+
+setUpLayout();
 
 let project = null;
 
@@ -35,6 +38,11 @@ const exportSummary = document.querySelector('#export-summary');
 const exportProblems = document.querySelector('#export-problems');
 const exportWarnings = document.querySelector('#export-warnings');
 const exportButton = document.querySelector('#export-button');
+const exportTopButton = document.querySelector('#export-top');
+const exportCount = document.querySelector('#export-count');
+const tabs = document.querySelector('#tabs');
+const filesSection = document.querySelector('#files-section');
+const xmlSection = document.querySelector('#xml-section');
 const xmlPreview = document.querySelector('#xml-preview');
 const mappingSection = document.querySelector('#mapping-section');
 const gridContainer = document.querySelector('#grid');
@@ -186,9 +194,12 @@ roundRobinSelect.addEventListener('change', () => {
   renderExport();
 });
 
-exportButton.addEventListener('click', () => {
-  download(xmlPreview.textContent, `${project.folderName || 'preset'}.dspreset`, 'application/xml');
-});
+// The same export from the top bar (any tab) and the Export tab.
+for (const button of [exportButton, exportTopButton]) {
+  button.addEventListener('click', () => {
+    download(xmlPreview.textContent, `${project.folderName || 'preset'}.dspreset`, 'application/xml');
+  });
+}
 
 saveButton.addEventListener('click', () => {
   download(projectToJson(project), `${project.folderName || 'project'}.dsproject.json`, 'application/json');
@@ -253,7 +264,9 @@ function render() {
     `${samples.length - unparsed} parsed, ${unparsed} not parsed` +
     (unreadable > 0 ? `, ${unreadable} could not be read` : '');
 
+  tabs.hidden = false;
   tableBody.replaceChildren(...samples.map(renderRow));
+  filesSection.hidden = false;
   // After a zone edit, redraw everything so the table and XML stay in sync.
   renderGrid(gridContainer, zoneDetails, project, render, renderExport);
   mappingSection.hidden = false;
@@ -328,8 +341,14 @@ function renderExport() {
   exportWarnings.replaceChildren(...findWarnings(project).messages.map((m) => listItem(`Warning: ${m}`)));
   exportProblems.replaceChildren(...problems.map(listItem));
   exportButton.disabled = problems.length > 0;
+  // The top bar's button too, and the Export tab shows how many problems
+  // there are, so they're seen from any tab.
+  exportTopButton.disabled = problems.length > 0;
+  exportTopButton.title = problems.length > 0 ? 'Fix the problems listed on the Export tab first' : '';
+  exportCount.textContent = problems.length > 0 ? `(${problems.length} problem${problems.length > 1 ? 's' : ''})` : '';
   xmlPreview.textContent = xml;
   exportSection.hidden = false;
+  xmlSection.hidden = false;
 }
 
 function renderRow(sample) {

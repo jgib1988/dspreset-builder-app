@@ -54,6 +54,14 @@ export const MODULATOR_KINDS = {
       depth,
       number('delayTime', 'Delay', 's', 0, Infinity, 0.01, 0, { omit: (v) => v === 0 }),
       scope('global'),
+      // docs: trigger. Only for shared LFOs (one per note always starts
+      // fresh). Up to 1.40.1 every shared LFO restarted on each note; from
+      // 1.41 the default (none) keeps it running, so its delay happens only
+      // once, at load (tested). "yes" keeps the old behaviour.
+      choice('trigger', 'Restart on note', [['attack', 'yes'], ['none', 'no (keeps running; DS 1.41+)']], 'attack', {
+        show: (m) => m.scope === 'global',
+        omit: (v) => v === 'none',
+      }),
     ],
   },
   envelope: {

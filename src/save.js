@@ -5,6 +5,7 @@
 // version of the app can recognise older files and update them.
 
 import { createProject, createSample } from './project.js';
+import { MODULATOR_KINDS } from './modulators.js';
 
 const APP = 'dspreset-builder';
 const VERSION = 1;
@@ -51,9 +52,20 @@ function withDefaults(saved) {
     },
     effects: saved.effects.map((e) => ({ enabled: true, ...e })),
     noteEffects: (saved.noteEffects ?? []).map((e) => ({ enabled: true, ...e })),
+    modulators: (saved.modulators ?? []).map(withModulatorDefaults),
     samples: saved.samples.map((s) => ({ ...emptySample, ...s })),
     chokedBy: saved.chokedBy ?? chokedByFromGroups(saved.chokeGroups ?? {}),
   };
+}
+
+// A modulator saved before one of its settings existed gets that setting's
+// starting value (e.g. an LFO's "Restart on note": yes, which is how every
+// shared LFO behaved before the setting was added).
+function withModulatorDefaults(modulator) {
+  const definition = MODULATOR_KINDS[modulator.kind];
+  if (!definition) return modulator; // reported by the export check
+  const starts = Object.fromEntries(definition.fields.map((f) => [f.key, f.start]));
+  return { ...starts, ...modulator };
 }
 
 // Files saved before one-way choking had choke groups, e.g. { HatOpen: 1,

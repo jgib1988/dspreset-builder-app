@@ -86,12 +86,7 @@ function renderRow(sample, rerender, onChange) {
   enabled.type = 'checkbox';
   enabled.checked = sample.loopEnabled;
   enabled.addEventListener('change', () => {
-    sample.loopEnabled = enabled.checked;
-    if (sample.loopEnabled && sample.loopStart === null) {
-      sample.loopStart = sample.start ?? 0;
-      sample.loopEnd = sample.end ?? (sample.frames !== null ? sample.frames - 1 : null);
-      sample.loopCrossfade = 0;
-    }
+    setLoopEnabled(sample, enabled.checked);
     rerender();
     onChange();
   });
@@ -104,6 +99,18 @@ function renderRow(sample, rerender, onChange) {
     row.append(cell);
   }
   return row;
+}
+
+// Turns a sample's loop on or off. Turning it on the first time fills in a
+// starting loop: the whole (trimmed) file, no crossfade. Also used by the
+// Selected zones box (multiedit.js).
+export function setLoopEnabled(sample, enabled) {
+  sample.loopEnabled = enabled;
+  if (enabled && sample.loopStart === null) {
+    sample.loopStart = sample.start ?? 0;
+    sample.loopEnd = sample.end ?? (sample.frames !== null ? sample.frames - 1 : null);
+    sample.loopCrossfade = 0;
+  }
 }
 
 // A number box for a frame value, with the time shown next to it. `blank`

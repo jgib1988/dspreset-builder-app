@@ -18,6 +18,7 @@ import { articulationOf, getZones, isRelease, mixLayerLabel, mixLayerOf, zoneKey
 import { midiToNoteName } from './filename.js';
 import { renderLoopEditor } from './loops.js';
 import { renderLevelEditor } from './levels.js';
+import { renderMultiEditor } from './multiedit.js';
 import { findWarnings } from './validate.js';
 
 // Sizes in SVG units. The whole drawing is scaled to fit the page width.
@@ -34,9 +35,10 @@ const HANDLE_SIZE = 4; // thickness of the invisible edge strips used for resizi
 const BLACK_KEYS = [1, 3, 6, 8, 10]; // C#, D#, F#, G#, A# (semitones above C)
 const LAYER_COLORS = ['#4e79a7', '#f28e2b', '#59a14f', '#e15759', '#b07aa1', '#76b7b2', '#9c755f', '#edc948'];
 
-// Which zone is selected (its zoneKey). Screen-only state, so it isn't in the
-// project data.
-let selectedKey = null;
+// Which zones are selected (their zoneKeys). Shift-click (or Cmd/Ctrl-click)
+// adds or removes one; a plain click selects just that one. Screen-only
+// state, so it isn't in the project data.
+const selectedKeys = new Set();
 
 // Whether the grid shows release samples (true) or normal ones, and which
 // articulation and mix layer (0 = none). Screen-only.
@@ -63,7 +65,7 @@ export function renderGrid(container, details, project, onChange, onLoopChange) 
       mixLayerOf(project, zone[0]) === showMixLayer,
   );
   const layers = [...new Set(zones.map((zone) => zone[0].velocityLayer))].sort((a, b) => a - b);
-  const isSelected = (zone) => zoneKey(zone[0]) === selectedKey;
+  const isSelected = (zone) => selectedKeys.has(zoneKey(zone[0]));
   // Recomputed on every redraw, so outlines update while dragging.
   const { overlapping } = findWarnings(project);
   const redraw = () => renderGrid(container, details, project, onChange, onLoopChange);
@@ -71,7 +73,7 @@ export function renderGrid(container, details, project, onChange, onLoopChange) 
   const svg = svgElement('svg', { viewBox: `0 0 ${WIDTH} ${HEIGHT}`, class: 'grid' });
   // Pressing on empty space deselects.
   svg.addEventListener('pointerdown', () => {
-    selectedKey = null;
+    selectedKeys.clear();
     redraw();
   });
 
@@ -85,7 +87,17 @@ export function renderGrid(container, details, project, onChange, onLoopChange) 
     const element = drawZone(svg, zone, color, isSelected(zone), overlapping.has(zoneKey(zone[0])));
     element.addEventListener('pointerdown', (event) => {
       event.stopPropagation(); // don't let the background deselect it
-      selectedKey = zoneKey(zone[0]);
+      const key = zoneKey(zone[0]);
+      if (event.shiftKey || event.metaKey || event.ctrlKey) {
+        // Add or remove this zone; no dragging.
+        event.preventDefault();
+        if (selectedKeys.has(key)) selectedKeys.delete(key);
+        else selectedKeys.add(key);
+        redraw();
+        return;
+      }
+      selectedKeys.clear();
+      selectedKeys.add(key);
       startDrag(event, zone, event.target.dataset.mode, container, redraw, onChange);
     });
   }
@@ -94,16 +106,35 @@ export function renderGrid(container, details, project, onChange, onLoopChange) 
   if (articulations.length > 1) pickers.push(articulationPicker(project, articulations, redraw));
   if (mixLayers.length > 1) pickers.push(mixLayerPicker(project, mixLayers, redraw));
   if (hasRelease) pickers.push(kindPicker(redraw));
+  pickers.push(selectionBar(zones, redraw));
   container.replaceChildren(...pickers, svg);
   renderDetails(
     details,
-    zones.find(isSelected),
+    zones.filter(isSelected),
     () => {
       redraw();
       onChange();
     },
     onLoopChange,
   );
+}
+
+// "Select all" (every zone in the current view) and how to select several.
+function selectionBar(zones, redraw) {
+  const bar = document.createElement('p');
+  bar.className = 'grid-kind';
+  const all = document.createElement('button');
+  all.textContent = 'Select all';
+  all.title = 'Select every zone shown, to edit their settings together';
+  all.addEventListener('click', () => {
+    for (const zone of zones) selectedKeys.add(zoneKey(zone[0]));
+    redraw();
+  });
+  const hint = document.createElement('span');
+  hint.className = 'hint';
+  hint.textContent = ' Shift-click zones to select several and edit them together.';
+  bar.append(all, hint);
+  return bar;
 }
 
 // A dropdown of the articulations that have samples (0 = no articulation).
@@ -124,7 +155,7 @@ function articulationPicker(project, articulations, redraw) {
   select.value = showArticulation;
   select.addEventListener('change', () => {
     showArticulation = Number(select.value);
-    selectedKey = null;
+    selectedKeys.clear();
     redraw();
   });
   bar.append('Articulation: ', select);
@@ -145,7 +176,7 @@ function mixLayerPicker(project, mixLayers, redraw) {
   select.value = showMixLayer;
   select.addEventListener('change', () => {
     showMixLayer = Number(select.value);
-    selectedKey = null;
+    selectedKeys.clear();
     redraw();
   });
   bar.append('Mix layer: ', select);
@@ -165,7 +196,7 @@ function kindPicker(redraw) {
     radio.checked = showRelease === release;
     radio.addEventListener('change', () => {
       showRelease = release;
-      selectedKey = null;
+      selectedKeys.clear();
       redraw();
     });
     label.append(radio, ` ${text} `);
@@ -350,14 +381,20 @@ function drawZone(svg, zone, color, isSelected, isOverlapping) {
   return group;
 }
 
-// The area under the grid. For a selected zone: a line with a box for typing
+// The area under the grid. For one selected zone: a line with a box for typing
 // a new root note (applied to all the zone's round-robins; `onRootChange` is
-// called after it changes), then the Trim and loop box.
-function renderDetails(details, zone, onRootChange, onLoopChange) {
-  if (!zone) {
+// called after it changes), then the Trim and loop box. For several: the
+// Selected zones box, which edits them all at once.
+function renderDetails(details, selected, onRootChange, onLoopChange) {
+  if (selected.length === 0) {
     details.textContent = 'Click a zone to see its details.';
     return;
   }
+  if (selected.length > 1) {
+    renderMultiEditor(details, selected, onLoopChange);
+    return;
+  }
+  const zone = selected[0];
   const sample = zone[0];
 
   // One sample: show its path. Several round-robins: describe the zone.

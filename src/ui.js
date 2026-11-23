@@ -60,15 +60,25 @@ const LAYER_ENVELOPE_KEYS = LAYER_TARGETS.filter((t) => t.envelope).map((t) => t
 // Starting settings for new controls on some effect parameters: a log
 // scale for ones that span a wide range (log needs a min above 0), and a
 // narrower range for delay stereo offset. Anything else starts linear over
-// the parameter's full range.
+// the parameter's full range. Keyed by setting, or by "kind.setting" for
+// one effect only (both distortions have a drive; the compressor and the
+// wave folder both have a threshold).
 const EFFECT_CONTROL_DEFAULTS = {
-  frequency: { scale: 'log', min: 20 },
+  // Every frequency and cutoff: log, so each part of the knob covers the
+  // same number of octaves.
+  frequency: { scale: 'log', min: 20 }, // filter cutoff, EQ frequency
   centerFrequency: { scale: 'log', min: 20 },
   feedbackCutoff: { scale: 'log' },
   delayTime: { scale: 'log', min: 0.01 },
   attack: { scale: 'log' }, // compressor, 0.1–200 ms
   release: { scale: 'log' }, // compressor, 5–2000 ms
   stereoOffset: { min: -1, max: 1 },
+  // Drive is input gain (×1000 = +60 dB), so the full range is far too loud
+  // for a knob: log over a narrower range (the docs' example knob stops at 40).
+  'wave_shaper.drive': { scale: 'log', max: 40 },
+  'wave_folder.drive': { scale: 'log', max: 20 },
+  // Above 1 the folded signal gets very loud; the docs' example knob uses 0–1.
+  'wave_folder.threshold': { max: 1 },
 };
 
 // Starting settings for new controls on modulator settings whose own range
@@ -431,7 +441,7 @@ export function resolveTarget(project, { effectId, key }) {
   const parameter = EFFECT_BINDINGS[effect.kind]?.[key];
   if (order < 0 || !parameter) return null;
   const param = definition.params[order];
-  const defaults = EFFECT_CONTROL_DEFAULTS[key] ?? {};
+  const defaults = EFFECT_CONTROL_DEFAULTS[`${effect.kind}.${key}`] ?? EFFECT_CONTROL_DEFAULTS[key] ?? {};
   return {
     ...common,
     key,

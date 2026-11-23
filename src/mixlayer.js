@@ -7,12 +7,11 @@
 // Checks on the values happen in export.js (checkPreset).
 
 import { isExportable, mixLayerLabel, mixLayerSettings, mixLayerVolume, remapName, usedMixLayers } from './mapping.js';
-import { updateMixerControls } from './ui.js';
+import { addLayerEnvelopeControls, removeLayerEnvelopeControls, updateMixerControls } from './ui.js';
 
 // `onMappingChange` is called after a mix layer changes (its zones move, so
 // the grid needs redrawing); `onChange` after a volume is typed.
 export function renderMixLayerEditor(container, project, onMappingChange, onChange) {
-  const rerender = () => renderMixLayerEditor(container, project, onMappingChange, onChange);
   const names = [...new Set(project.samples.filter(isExportable).map((s) => s.name))].sort();
 
   // One dropdown per name: none, or mix layer 1 up to one per name.
@@ -66,7 +65,7 @@ export function renderMixLayerEditor(container, project, onMappingChange, onChan
     label.append(`Mix layer ${mixLayer} (${mixLayerLabel(project, mixLayer)}) volume `, input, ' (0–1, the Mixer knob starts here)');
     const row = document.createElement('p');
     row.append(label);
-    return [row, settingsRow(project, mixLayer, rerender, onChange)];
+    return [row, settingsRow(project, mixLayer, onMappingChange, onChange)];
   });
 
   container.replaceChildren(list, ...rows);
@@ -85,8 +84,9 @@ const ENVELOPE_FIELDS = [
 
 // A mix layer's pan and tuning boxes, and its own envelope (tick box, then
 // attack, decay, sustain and release). Its settings are only stored once one
-// is changed, so untouched layers export nothing extra.
-function settingsRow(project, mixLayer, rerender, onChange) {
+// is changed, so untouched layers export nothing extra. Ticking the envelope
+// adds its knobs, so `onControlsChange` redraws the whole page.
+function settingsRow(project, mixLayer, onControlsChange, onChange) {
   const settings = mixLayerSettings(project, mixLayer);
   const set = (key, value) => {
     project.mixLayerSettings[mixLayer] = { ...mixLayerSettings(project, mixLayer), [key]: value };
@@ -122,8 +122,9 @@ function settingsRow(project, mixLayer, rerender, onChange) {
       for (const { key } of ENVELOPE_FIELDS) set(key, project.envelope[key]);
     }
     set('ownEnvelope', own.checked);
-    rerender();
-    onChange();
+    if (own.checked) addLayerEnvelopeControls(project, mixLayer);
+    else removeLayerEnvelopeControls(project, mixLayer);
+    onControlsChange();
   });
   const ownLabel = document.createElement('label');
   ownLabel.className = 'envelope-field';

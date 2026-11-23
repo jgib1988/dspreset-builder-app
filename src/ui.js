@@ -7,13 +7,13 @@
 // A control stores only what it targets and how it looks. Its starting value
 // is read from the setting it controls, so the project stays the single
 // source of truth. Controls are placed automatically (layoutControls):
-// Global, Glide, Amp envelope, Articulation and Mixer panels first, then one panel
-// per effect in chain order, one per per-note effect, one per modulator, then
+// Global, Glide, Amp envelope, Articulation and Mixer panels first, then one per
+// mix layer with its own knobs, then one panel per effect in chain order, one per per-note effect, one per modulator, then
 // the Arpeggiator panel, the Sequences panel (Play menu) and one panel per
 // sequence (Play button, Rate).
 
 import { EFFECT_BINDINGS, EFFECT_KINDS, NOTE_EFFECTS_TAG, visibleParams } from './effects.js';
-import { articulationLabel, articulationVolume, mixLayerLabel, mixLayerVolume, usedArticulations, usedMixLayers } from './mapping.js';
+import { articulationLabel, articulationVolume, mixLayerLabel, mixLayerSettings, mixLayerVolume, usedArticulations, usedMixLayers } from './mapping.js';
 import { MODULATOR_BINDINGS, MODULATOR_KINDS, visibleFields } from './modulators.js';
 import { ARP_NUMBERS, ARP_ORDERS } from './arpeggiator.js';
 
@@ -41,6 +41,21 @@ const AMP_TARGETS = [
   { key: 'decayCurve', label: 'Dec curve', parameter: 'ENV_DECAY_CURVE', range: [-100, 100], valid: [-100, 100] },
   { key: 'releaseCurve', label: 'Rel curve', parameter: 'ENV_RELEASE_CURVE', range: [-100, 100], valid: [-100, 100] },
 ];
+
+// A mix layer's own knobs (docs: type="amp" level="group"; tested in the
+// plugin with groupTags="mixN" and with groupIndex). Pan and tuning move
+// all the layer's groups, release ones too, as groupPan and groupTuning do.
+// The envelope ones only work while the layer has its own envelope.
+const LAYER_TARGETS = [
+  { key: 'pan', label: 'Pan', parameter: 'PAN', range: [-100, 100], valid: [-100, 100] },
+  // ±48 matches the Mix layers section's check.
+  { key: 'tuning', label: 'Tuning', parameter: 'GROUP_TUNING', range: [-12, 12], valid: [-48, 48] },
+  { key: 'attack', label: 'Attack', parameter: 'ENV_ATTACK', range: [0, 10], valid: [0, Infinity], envelope: true },
+  { key: 'decay', label: 'Decay', parameter: 'ENV_DECAY', range: [0, 10], valid: [0, Infinity], envelope: true },
+  { key: 'sustain', label: 'Sustain', parameter: 'ENV_SUSTAIN', range: [0, 1], valid: [0, 1], envelope: true },
+  { key: 'release', label: 'Release', parameter: 'ENV_RELEASE', range: [0, 10], valid: [0, Infinity], envelope: true },
+];
+const LAYER_ENVELOPE_KEYS = LAYER_TARGETS.filter((t) => t.envelope).map((t) => t.key);
 
 // Starting settings for new controls on some effect parameters: a log
 // scale for ones that span a wide range (log needs a min above 0), and a
@@ -112,6 +127,8 @@ function sectionKey({ effectId, key }) {
   if (key === 'sequenceMenu') return 'sequences';
   if (key.startsWith('arp')) return 'arpeggiator';
   if (mixLayerNumber(key) !== null) return 'mixer';
+  const layer = layerSetting(key);
+  if (layer) return `layer${layer.mixLayer}`;
   return key in INSTRUMENT_SETTINGS ? 'global' : 'amp';
 }
 
@@ -148,6 +165,18 @@ function articulationNumber(key) {
 function mixLayerNumber(key) {
   const match = /^mix(\d+)$/.exec(key);
   return match ? Number(match[1]) : null;
+}
+
+// A mix layer's own knob's key is 'mix', the layer number and the setting,
+// e.g. 'mix2pan'. Returns { mixLayer, setting }, or null for other keys.
+function layerSetting(key) {
+  const match = /^mix(\d+)(pan|tuning|attack|decay|sustain|release)$/.exec(key);
+  return match ? { mixLayer: Number(match[1]), setting: match[2] } : null;
+}
+
+// The panel title for a mix layer's own knobs, e.g. "Mix layer 2 (Room)".
+function layerTitle(project, mixLayer) {
+  return `Mix layer ${mixLayer} (${mixLayerLabel(project, mixLayer)})`;
 }
 
 // The name shown for an effect or modulator, in the plugin's panels and in
@@ -317,6 +346,29 @@ export function resolveTarget(project, { effectId, key }) {
       integer: false,
     };
   }
+  // A mix layer's own pan, tuning or envelope knob. Envelope knobs reach the
+  // layer's key-down groups by number (export.js), so the release groups
+  // keep following the instrument's envelope.
+  const layer = effectId === null ? layerSetting(key) : null;
+  if (layer) {
+    if (!usedMixLayers(project).includes(layer.mixLayer)) return null;
+    const order = LAYER_TARGETS.findIndex((t) => t.key === layer.setting);
+    const { envelope, ...target } = LAYER_TARGETS[order];
+    return {
+      ...target,
+      key,
+      order,
+      sectionTitle: layerTitle(project, layer.mixLayer),
+      value: mixLayerSettings(project, layer.mixLayer)[layer.setting],
+      bindingTarget: `type="amp" level="group" groupTags="mix${layer.mixLayer}"`,
+      // The layer number, for envelope knobs (null for pan and tuning).
+      layerEnvelope: envelope ? layer.mixLayer : null,
+      needsEnvelope: false,
+      needsValue: null,
+      applies: true,
+      integer: false,
+    };
+  }
   // A mix layer's volume (docs: TAG_VOLUME, 0–1). Only there while the
   // layer has samples.
   const mixLayer = effectId === null ? mixLayerNumber(key) : null;
@@ -460,6 +512,11 @@ function availableTargets(project) {
     const options = mixLayers.map((n) => ({ key: `mix${n}`, label: `Mix layer ${n} (${mixLayerLabel(project, n)})` }));
     groups.push({ title: SECTION_TITLES.mixer, effectId: null, options });
   }
+  for (const mixLayer of mixLayers) {
+    const ownEnvelope = mixLayerSettings(project, mixLayer).ownEnvelope;
+    const options = LAYER_TARGETS.filter((t) => ownEnvelope || !t.envelope).map((t) => ({ key: `mix${mixLayer}${t.key}`, label: t.label }));
+    groups.push({ title: layerTitle(project, mixLayer), effectId: null, options });
+  }
   for (const [list, prefix] of [[project.effects, ''], [project.noteEffects, 'Per note ']]) {
     list.forEach((effect, index) => {
       const definition = EFFECT_KINDS[effect.kind];
@@ -511,6 +568,7 @@ export function layoutControls(project) {
   const owners = [...project.effects, ...project.noteEffects, ...project.modulators];
   const sections = [
     'global', 'glide', 'amp', 'articulation', 'mixer',
+    ...usedMixLayers(project).map((n) => `layer${n}`),
     ...owners.map((o) => o.id),
     'arpeggiator',
     'sequences',
@@ -521,7 +579,7 @@ export function layoutControls(project) {
     const controls = project.ui.controls.filter((c) => sectionKey(c) === section);
     if (controls.length === 0) continue;
     const owner = owners.find((o) => o.id === section);
-    const title = SECTION_TITLES[section] ?? ownerTitle(project, owner);
+    const title = SECTION_TITLES[section] ?? (owner ? ownerTitle(project, owner) : layerTitle(project, Number(section.slice(5))));
     const button = controls.find((c) => c.kind === 'button') ?? null;
     const menu = controls.find((c) => c.kind === 'menu') ?? null;
     // Knobs in the order their settings appear, not the order they were added.
@@ -755,7 +813,9 @@ export function renderControlsEditor(container, project, onChange) {
 // - a second articulation (key switching) adds the articulation menu, and
 //   going back to fewer than two removes it;
 // - a new mix layer adds its volume control, and a mix layer with no
-//   samples left loses it.
+//   samples left loses it and its own knobs;
+// - ticking a mix layer's own envelope adds its attack, decay, sustain and
+//   release; unticking removes them.
 // Controls that stop applying (e.g. resonance on lowpass_1pl) are removed.
 const AUTO_ENVELOPE_KEYS = ['attack', 'decay', 'sustain', 'release'];
 const AUTO_MODULATOR_KEYS = {
@@ -799,10 +859,22 @@ export function removeUnusedArticulationVolumes(project) {
 export function updateMixerControls(project) {
   const used = usedMixLayers(project);
   project.ui.controls = project.ui.controls.filter((c) => {
-    const mixLayer = c.effectId === null ? mixLayerNumber(c.key) : null;
+    const mixLayer = c.effectId === null ? (mixLayerNumber(c.key) ?? layerSetting(c.key)?.mixLayer ?? null) : null;
     return mixLayer === null || used.includes(mixLayer);
   });
   for (const mixLayer of used) addControl(project, null, `mix${mixLayer}`);
+}
+
+// A mix layer's own envelope knobs, added when its Own envelope is ticked
+// and removed when it's unticked.
+export function addLayerEnvelopeControls(project, mixLayer) {
+  for (const key of LAYER_ENVELOPE_KEYS) addControl(project, null, `mix${mixLayer}${key}`);
+}
+
+export function removeLayerEnvelopeControls(project, mixLayer) {
+  project.ui.controls = project.ui.controls.filter(
+    (c) => c.effectId !== null || !LAYER_ENVELOPE_KEYS.some((key) => c.key === `mix${mixLayer}${key}`),
+  );
 }
 
 export function addModulatorControls(project, modulator) {

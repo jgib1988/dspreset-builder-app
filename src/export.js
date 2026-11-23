@@ -84,39 +84,7 @@ export function buildPresetXml(project) {
   }
   if (tagLines.length > 0) lines.push('  <tags>', ...tagLines, '  </tags>');
   lines.push(`  <groups${groupsAttributes(project, usesRoundRobin)}>`);
-  const releaseAttributes =
-    ' trigger="release"' +
-    (project.releaseDecay !== null ? ` releaseTriggerDecay="${project.releaseDecay}dB"` : '') +
-    (project.releaseIgnoresEnvelope ? ' ampEnvEnabled="false"' : '');
-  // Normal groups, then release groups; within each, no articulation first,
-  // then articulations in order, and within those, no mix layer first, then
-  // mix layers in order.
-  const groups = [];
-  for (const release of [false, true]) {
-    for (const articulation of [0, ...articulations]) {
-      for (const mixLayer of [0, ...mixLayers]) {
-        const inSet = zones.filter(
-          (zone) =>
-            isRelease(project, zone[0]) === release &&
-            articulationOf(project, zone[0]) === articulation &&
-            mixLayerOf(project, zone[0]) === mixLayer,
-        );
-        // e.g. names "v1 art2 mix1 release", tags "art2,mix1".
-        const tags = [];
-        if (articulation > 0) tags.push(`art${articulation}`);
-        if (mixLayer > 0) tags.push(`mix${mixLayer}`);
-        if (usesMonoTags(project) && !release) tags.push(monoTag(mixLayer));
-        const suffix = tags.map((tag) => ` ${tag}`).join('') + (release ? ' release' : '');
-        // Every group also gets the per-note effects tag, which their controls target.
-        const groupTags = project.noteEffects.length > 0 ? [...tags, NOTE_EFFECTS_TAG] : tags;
-        const attributes =
-          (groupTags.length > 0 ? ` tags="${groupTags.join(',')}"` : '') +
-          (release ? releaseAttributes : '') +
-          (mixLayer > 0 ? mixLayerAttributes(project, mixLayer, release) : '');
-        groups.push(...layerGroups(inSet, suffix, attributes));
-      }
-    }
-  }
+  const groups = presetGroups(project);
   for (const { name, attributes, zones: inLayer } of groups) {
     lines.push(`    <group name="${name}"${attributes}>`);
     for (const zone of inLayer) {
@@ -169,6 +137,46 @@ export function buildPresetXml(project) {
 
   lines.push('</DecentSampler>', '');
   return lines.join('\n');
+}
+
+// Every <group> in export order, each { name, attributes, zones, release,
+// mixLayer }. Controls use the order to find a group by its number.
+function presetGroups(project) {
+  const releaseAttributes =
+    ' trigger="release"' +
+    (project.releaseDecay !== null ? ` releaseTriggerDecay="${project.releaseDecay}dB"` : '') +
+    (project.releaseIgnoresEnvelope ? ' ampEnvEnabled="false"' : '');
+  // Normal groups, then release groups; within each, no articulation first,
+  // then articulations in order, and within those, no mix layer first, then
+  // mix layers in order.
+  const zones = getZones(project);
+  const groups = [];
+  for (const release of [false, true]) {
+    for (const articulation of [0, ...usedArticulations(project)]) {
+      for (const mixLayer of [0, ...usedMixLayers(project)]) {
+        const inSet = zones.filter(
+          (zone) =>
+            isRelease(project, zone[0]) === release &&
+            articulationOf(project, zone[0]) === articulation &&
+            mixLayerOf(project, zone[0]) === mixLayer,
+        );
+        // e.g. names "v1 art2 mix1 release", tags "art2,mix1".
+        const tags = [];
+        if (articulation > 0) tags.push(`art${articulation}`);
+        if (mixLayer > 0) tags.push(`mix${mixLayer}`);
+        if (usesMonoTags(project) && !release) tags.push(monoTag(mixLayer));
+        const suffix = tags.map((tag) => ` ${tag}`).join('') + (release ? ' release' : '');
+        // Every group also gets the per-note effects tag, which their controls target.
+        const groupTags = project.noteEffects.length > 0 ? [...tags, NOTE_EFFECTS_TAG] : tags;
+        const attributes =
+          (groupTags.length > 0 ? ` tags="${groupTags.join(',')}"` : '') +
+          (release ? releaseAttributes : '') +
+          (mixLayer > 0 ? mixLayerAttributes(project, mixLayer, release) : '');
+        groups.push(...layerGroups(inSet, suffix, attributes).map((group) => ({ ...group, release, mixLayer })));
+      }
+    }
+  }
+  return groups;
 }
 
 // A mix layer's pan, tuning and own envelope, for its groups. Values at 0
@@ -441,13 +449,30 @@ function uiLines(project) {
           ` label="${escapeXml(control.label)}" parameterName="${escapeXml(parameterName)}"` +
           ` valueType="${valueType}" minValue="${min}" maxValue="${max}" value="${value}"` +
           ` textColor="FFFFFFFF"${style ? ` style="${style}"` : ''}>`,
-        `        <binding ${target.bindingTarget} parameter="${target.parameter}" ${translation}/>`,
+        ...knobBindingTargets(project, target).map(
+          (where) => `        <binding ${where} parameter="${target.parameter}" ${translation}/>`,
+        ),
         '      </labeled-knob>',
       );
     }
   }
   lines.push('    </tab>', '  </ui>');
   return lines;
+}
+
+// Where a knob's binding goes. A mix layer's envelope knob gets one binding
+// per key-down group of that layer, by number (docs: groupIndex; tested in
+// the plugin), since its tag would also reach the layer's release groups.
+function knobBindingTargets(project, target) {
+  if (target.layerEnvelope === null || target.layerEnvelope === undefined) return [target.bindingTarget];
+  return layerGroupIndexes(project, target.layerEnvelope).map((index) => `type="amp" level="group" groupIndex="${index}"`);
+}
+
+// The numbers (from 0) of a mix layer's key-down groups.
+function layerGroupIndexes(project, mixLayer) {
+  return presetGroups(project)
+    .map((group, index) => (group.mixLayer === mixLayer && !group.release ? index : null))
+    .filter((index) => index !== null);
 }
 
 // The articulation menu: one option per articulation, each enabling its own
@@ -975,6 +1000,14 @@ function checkControls(project) {
       problems.push(`${name}: tick "Set an envelope" to use envelope controls`);
     }
     if (!target.applies) problems.push(`${name}: ${target.label} doesn't apply to this effect's current type`);
+    const layer = target.layerEnvelope;
+    if (layer !== null && layer !== undefined) {
+      if (!mixLayerSettings(project, layer).ownEnvelope) {
+        problems.push(`${name}: tick "Own envelope" for mix layer ${layer} to use its envelope controls`);
+      } else if (layerGroupIndexes(project, layer).length === 0) {
+        problems.push(`${name}: mix layer ${layer} has only release samples, which don't use its envelope`);
+      }
+    }
     if (control.kind !== 'knob') continue;
 
     const { minValue: min, maxValue: max } = control;

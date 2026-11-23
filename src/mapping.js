@@ -55,6 +55,13 @@ export function mixLayerVolume(project, mixLayer) {
   return volume === undefined ? 1 : volume;
 }
 
+// A mix layer's own pan (−100–100, added to each sample's pan), tuning
+// (semitones) and envelope, with defaults for anything not set.
+export const MIX_LAYER_DEFAULTS = { pan: 0, tuning: 0, ownEnvelope: false, attack: 0, decay: 0, sustain: 1, release: 0.5 };
+export function mixLayerSettings(project, mixLayer) {
+  return { ...MIX_LAYER_DEFAULTS, ...project.mixLayerSettings?.[mixLayer] };
+}
+
 // A mix layer's name for labels: its sample names, e.g. "Close" or "Close / CloseRel".
 export function mixLayerLabel(project, mixLayer) {
   const names = project.samples.filter((s) => isExportable(s) && mixLayerOf(project, s) === mixLayer).map((s) => s.name);

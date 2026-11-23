@@ -105,6 +105,12 @@ export function createProject(folderName) {
     // Each mix layer's starting volume, 0–1, by number, e.g. { 2: 0.5 }
     // (docs: volume on <tag>). Missing means 1, which isn't written.
     mixLayerVolumes: {},
+    // Each mix layer's own pan, tuning and (optionally) envelope, by number,
+    // e.g. { 2: { pan: -50, tuning: 0, ownEnvelope: true, attack: 2, decay: 0,
+    // sustain: 1, release: 0.5 } } (docs: groupPan, groupTuning and attack,
+    // decay, sustain, release on <group>). Missing means the defaults in
+    // mapping.js (mixLayerSettings): nothing is written.
+    mixLayerSettings: {},
     samples: [],
   };
 }

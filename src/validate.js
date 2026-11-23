@@ -3,7 +3,7 @@
 // checkPreset). Zones with invalid ranges are skipped here; checkPreset
 // already reports them.
 
-import { getZones, isExportable, isRelease, mappingSet, usedArticulations, zoneKey } from './mapping.js';
+import { getZones, isExportable, isRelease, mappingSet, mixLayerSettings, usedArticulations, usedMixLayers, zoneKey } from './mapping.js';
 import { midiToNoteName } from './filename.js';
 
 // Returns { messages, overlapping }, where `overlapping` is the set of zone
@@ -29,6 +29,7 @@ export function findWarnings(project) {
     ...findRootsOutside(zones),
     ...findMixedFormats(project),
     ...findSequenceWarnings(project, zones),
+    ...findOwnEnvelopeWarnings(project),
     ...(project.arpeggiator.included && project.sequences.length > 0
       ? ['While the arpeggiator is on, sequence notes go through it and are arpeggiated, not played as written']
       : []),
@@ -219,4 +220,15 @@ function velocities(lo, hi) {
 
 function capitalise(text) {
   return text[0].toUpperCase() + text.slice(1);
+}
+
+// A mix layer with its own envelope ignores the instrument's envelope knobs
+// (tested in the plugin: the Attack knob changed only the other layer).
+const ENVELOPE_KEYS = ['attack', 'decay', 'sustain', 'release'];
+function findOwnEnvelopeWarnings(project) {
+  const hasKnobs = project.ui.controls.some((c) => c.effectId === null && ENVELOPE_KEYS.includes(c.key));
+  if (!hasKnobs) return [];
+  return usedMixLayers(project)
+    .filter((mixLayer) => mixLayerSettings(project, mixLayer).ownEnvelope)
+    .map((mixLayer) => `Mix layer ${mixLayer} has its own envelope, so the Amp envelope knobs don't change it`);
 }

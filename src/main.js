@@ -113,6 +113,7 @@ pickButton.addEventListener('click', async () => {
     project.keyswitches = previous.keyswitches;
     project.mixLayers = previous.mixLayers;
     project.mixLayerVolumes = previous.mixLayerVolumes;
+    project.mixLayerSettings = previous.mixLayerSettings;
     project.articulationVolumes = previous.articulationVolumes;
     project.envelope = previous.envelope;
     project.ui = previous.ui;

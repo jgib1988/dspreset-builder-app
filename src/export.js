@@ -27,6 +27,10 @@
 // Mix layers get their own groups too, tagged mixN (a group can carry two
 // tags, e.g. tags="art1,mix2"; tested in the plugin). A starting volume
 // other than 1 goes on <tags><tag volume>; Mixer knobs use TAG_VOLUME.
+// A layer's pan and tuning go on all its groups (groupPan, groupTuning), its
+// own envelope only on its key-down groups (attack… on <group>, which replaces
+// the instrument's; the instrument's envelope knobs then don't reach it).
+// All tested in the plugin (test-samples/LayerFxTest).
 //
 // Monophonic: normal groups get a tag with polyphony="1" (tested in the
 // plugin): monoN for mix layer N, so each layer is mono on its own, and
@@ -34,7 +38,7 @@
 // their layer, so the voice limit can't go on that). With a Mono/Poly button
 // the tags are always written; the button sets TAG_POLYPHONY to 1 or -1.
 
-import { articulationOf, articulationVolume, getZones, isExportable, isRelease, mixLayerOf, mixLayerVolume, usedArticulations, usedMixLayers } from './mapping.js';
+import { articulationOf, articulationVolume, getZones, isExportable, isRelease, mixLayerOf, mixLayerSettings, mixLayerVolume, usedArticulations, usedMixLayers } from './mapping.js';
 import { midiToNoteName } from './filename.js';
 import { CURVE_DEFAULTS } from './project.js';
 import { EFFECT_KINDS, NOTE_EFFECTS_TAG, effectTypes, isImpulseResponseFile, visibleParams } from './effects.js';
@@ -105,7 +109,10 @@ export function buildPresetXml(project) {
         const suffix = tags.map((tag) => ` ${tag}`).join('') + (release ? ' release' : '');
         // Every group also gets the per-note effects tag, which their controls target.
         const groupTags = project.noteEffects.length > 0 ? [...tags, NOTE_EFFECTS_TAG] : tags;
-        const attributes = (groupTags.length > 0 ? ` tags="${groupTags.join(',')}"` : '') + (release ? releaseAttributes : '');
+        const attributes =
+          (groupTags.length > 0 ? ` tags="${groupTags.join(',')}"` : '') +
+          (release ? releaseAttributes : '') +
+          (mixLayer > 0 ? mixLayerAttributes(project, mixLayer, release) : '');
         groups.push(...layerGroups(inSet, suffix, attributes));
       }
     }
@@ -162,6 +169,21 @@ export function buildPresetXml(project) {
 
   lines.push('</DecentSampler>', '');
   return lines.join('\n');
+}
+
+// A mix layer's pan, tuning and own envelope, for its groups. Values at 0
+// aren't written; the envelope isn't written on release groups.
+function mixLayerAttributes(project, mixLayer, release) {
+  const settings = mixLayerSettings(project, mixLayer);
+  let attributes = '';
+  if (settings.pan !== 0) attributes += ` groupPan="${settings.pan}"`;
+  if (settings.tuning !== 0) attributes += ` groupTuning="${settings.tuning}"`;
+  if (settings.ownEnvelope && !release) {
+    attributes +=
+      ` attack="${settings.attack}" decay="${settings.decay}"` +
+      ` sustain="${settings.sustain}" release="${settings.release}"`;
+  }
+  return attributes;
 }
 
 // The voice-limit tag for a mix layer's normal groups (0 = no mix layer).
@@ -619,6 +641,7 @@ export function checkPreset(project, xml) {
   }
   problems.push(...checkKeyswitches(project));
   problems.push(...checkMixLayerVolumes(project));
+  problems.push(...checkMixLayerSettings(project));
   problems.push(...checkArticulationVolumes(project));
   problems.push(...checkVoiceLimits(project));
   problems.push(...checkSequences(project));
@@ -838,6 +861,24 @@ function checkMixLayerVolumes(project) {
       return !Number.isFinite(volume) || volume < 0 || volume > 1;
     })
     .map((mixLayer) => `Mix layer ${mixLayer} volume must be a number from 0 to 1`);
+}
+
+// Pan −100–100; tuning ±48 semitones (a sanity limit, as for Global tuning);
+// the envelope as for the instrument's.
+function checkMixLayerSettings(project) {
+  const problems = [];
+  for (const mixLayer of usedMixLayers(project)) {
+    const { pan, tuning, ownEnvelope, ...envelope } = mixLayerSettings(project, mixLayer);
+    if (!Number.isFinite(pan) || Math.abs(pan) > 100) problems.push(`Mix layer ${mixLayer} pan must be a number from -100 to 100`);
+    if (!Number.isFinite(tuning) || Math.abs(tuning) > 48) {
+      problems.push(`Mix layer ${mixLayer} tuning must be a number of semitones from -48 to 48`);
+    }
+    if (ownEnvelope) {
+      const curves = { ...CURVE_DEFAULTS }; // not set per layer, so always fine
+      for (const problem of checkEnvelope({ ...envelope, ...curves })) problems.push(`Mix layer ${mixLayer} ${problem.replace('Envelope: ', 'envelope: ')}`);
+    }
+  }
+  return problems;
 }
 
 function checkArticulationVolumes(project) {

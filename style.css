@@ -491,3 +491,8 @@ details.fold > summary::before {
 details.fold[open] > summary::before {
   content: '▾ ';
 }
+
+/* A mix layer's pan, tuning and envelope, under its volume box. */
+.mixlayer-settings {
+  margin: -0.6rem 0 1rem 1.5rem;
+}

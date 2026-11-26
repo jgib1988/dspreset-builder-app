@@ -162,5 +162,12 @@ export function createSample({ path, sizeBytes, info, readError, parsed, parseEr
     volumeDb: 0,
     pan: 0,
     tuning: 0,
+    // Legato conditions, set in the Legato box under the grid (legato.js) and
+    // only exported on "legato only" samples (docs: previousNotes,
+    // legatoInterval on <sample>): play only when the previous note is one of
+    // these MIDI numbers (empty = any), and only when the new note minus the
+    // previous one is this many semitones (null = any).
+    previousNotes: [],
+    legatoInterval: null,
   };
 }

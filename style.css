@@ -34,6 +34,11 @@ td.muted {
   color: #888;
 }
 
+/* A message next to a box whose value wasn't accepted. */
+.problem-text {
+  color: #b00020;
+}
+
 #export-problems {
   color: #b00020;
 }

@@ -19,6 +19,7 @@ import { midiToNoteName } from './filename.js';
 import { renderLoopEditor } from './loops.js';
 import { renderLevelEditor } from './levels.js';
 import { renderMultiEditor } from './multiedit.js';
+import { renderLegatoZoneEditor } from './legato.js';
 import { findWarnings } from './validate.js';
 
 // Sizes in SVG units. The whole drawing is scaled to fit the page width.
@@ -399,6 +400,7 @@ function renderDetails(details, selected, onRootChange, onLoopChange) {
   }
   if (selected.length > 1) {
     renderMultiEditor(details, selected, onLoopChange);
+    if (showKind === 'legato') details.append(legatoBox(selected, onRootChange));
     return;
   }
   const zone = selected[0];
@@ -449,6 +451,14 @@ function renderDetails(details, selected, onRootChange, onLoopChange) {
   const levelBox = document.createElement('div');
   renderLevelEditor(levelBox, zone, onLoopChange);
   details.replaceChildren(line, loopBox, levelBox);
+  if (showKind === 'legato') details.append(legatoBox(selected, onRootChange));
+}
+
+// The Legato box (from notes, interval), for legato transition zones only.
+function legatoBox(zones, onChange) {
+  const box = document.createElement('div');
+  renderLegatoZoneEditor(box, zones, onChange);
+  return box;
 }
 
 function noteLabel(note) {

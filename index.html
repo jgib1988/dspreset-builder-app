@@ -35,7 +35,7 @@
       <li><strong>Chrome or Edge</strong> give the best folder picker. Other browsers work too, but the folder dialog looks different.</li>
       <li>Click a section's heading to fold it away.</li>
       <li><strong>Mix layers</strong> play several sample names together on the same keys (e.g. close and room mics), each with its own volume knob in the plugin's Mixer panel, and its own pan, tuning and (optionally) envelope, which can also get knobs in Controls.</li>
-      <li><strong>Legato</strong> plays transition samples when you press a key while still holding another (set each sample name to "first note only" or "legato only"). Use Choking or Monophonic so the held note stops.</li>
+      <li><strong>Legato</strong> plays transition samples when you press a key while still holding another (set each sample name to "first note only" or "legato only"), optionally only from certain notes or intervals. Use Choking or Monophonic so the held note stops.</li>
       <li><strong>Sequences</strong> are patterns the instrument plays by itself. Pressing a trigger key (C-1 to B-1 by default) starts one, transposed by that key. Trigger keys don't play samples. A Play button or Play menu (in Controls) plays one from the plugin window instead, with no key held.</li>
       <li>The <strong>Arpeggiator</strong> plays held notes one at a time in a pattern. While it is on, every note goes through it, including sequence notes.</li>
       <li><strong>Save project</strong> keeps your work as a .json file. To carry on later, load it, then pick the sample folder again.</li>
@@ -121,7 +121,8 @@
         <p class="hint">
           For instruments recorded with transitions (slurs) between notes. "First note only" samples play when no other
           key is held; "legato only" samples play when you press a key while still holding another. "Legato only" samples
-          get their own mapping: pick "Legato" above the grid. The held note keeps sounding unless something stops it:
+          get their own mapping: pick "Legato" above the grid, where clicking a zone lets you limit it to certain previous
+          notes or an interval (e.g. a slur recorded a step up). The held note keeps sounding unless something stops it:
           use Choking below (e.g. tick so the legato samples cut off the others) or Monophonic in the Global section (Sound tab).
         </p>
         <div id="legato"></div>

@@ -104,6 +104,11 @@ export function buildPresetXml(project) {
         if (s.volumeDb !== 0) line += ` volume="${s.volumeDb}dB"`;
         if (s.pan !== 0) line += ` pan="${s.pan}"`;
         if (s.tuning !== 0) line += ` tuning="${s.tuning}"`;
+        // Legato conditions (docs: on <sample>; tested in the plugin).
+        if (legatoTrigger(project, s) === 'legato') {
+          if (s.previousNotes.length > 0) line += ` previousNotes="${s.previousNotes.join(',')}"`;
+          if (s.legatoInterval !== null) line += ` legatoInterval="${s.legatoInterval}"`;
+        }
         line += chokeAttributes(project, s);
         lines.push(line + '/>');
       });
@@ -712,6 +717,14 @@ export function checkPreset(project, xml) {
 // ±48 semitones matches the Global tuning check.
 function checkLevels(s) {
   const problems = [];
+  // Legato conditions (only exported on "legato only" samples, but checked
+  // whenever set). The docs give previous notes as MIDI numbers 1–127.
+  if (!s.previousNotes.every((n) => Number.isInteger(n) && n >= 1 && n <= 127)) {
+    problems.push('previous notes must be notes from C#-2 to G8 (MIDI 1–127)');
+  }
+  if (s.legatoInterval !== null && !(Number.isInteger(s.legatoInterval) && Math.abs(s.legatoInterval) <= 127)) {
+    problems.push('legato interval must be a whole number of semitones from -127 to 127 (or blank)');
+  }
   if (!Number.isFinite(s.volumeDb)) problems.push('volume must be a number of dB');
   if (!Number.isFinite(s.pan) || Math.abs(s.pan) > 100) problems.push('pan must be a number from -100 to 100');
   if (!Number.isFinite(s.tuning) || Math.abs(s.tuning) > 48) problems.push('tuning must be a number of semitones from -48 to 48');

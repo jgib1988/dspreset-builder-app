@@ -246,4 +246,5 @@ const MANUAL_FIELDS = ['name', 'fileNote', 'velocityLayer', 'roundRobin', 'parse
 const KEPT_FIELDS = [
   'rootNote', 'loNote', 'hiNote', 'loVel', 'hiVel', 'start', 'end',
   'loopEnabled', 'loopStart', 'loopEnd', 'loopCrossfade', 'volumeDb', 'pan', 'tuning',
+  'previousNotes', 'legatoInterval',
 ];

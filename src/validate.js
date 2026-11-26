@@ -22,7 +22,7 @@ export function findWarnings(project) {
   }
   const overlapping = new Set();
   const messages = [
-    ...[...sets.values()].flatMap((set) => findOverlaps(set, overlapping)),
+    ...[...sets.values()].flatMap((set) => findOverlaps(set, overlapping, sampleKind(project, set[0][0]) === 'legato')),
     ...[...sets.values()].filter((set) => sampleKind(project, set[0][0]) === 'normal').flatMap(findGaps),
     ...findKeyswitchesOnZones(project, zones),
     ...project.modulators.filter((m) => m.targets.length === 0).map((m) => `Modulator ${m.id} has no targets, so it does nothing`),
@@ -40,8 +40,9 @@ export function findWarnings(project) {
 }
 
 // Two zones overlap when both their key and velocity ranges overlap: both
-// play at once.
-function findOverlaps(zones, overlapping) {
+// play at once. Legato transitions (`legato`) only overlap if they can also
+// play from the same previous note (their From notes and intervals allow it).
+function findOverlaps(zones, overlapping, legato = false) {
   const messages = [];
   zones.forEach((zoneA, i) => {
     const a = zoneA[0];
@@ -52,6 +53,7 @@ function findOverlaps(zones, overlapping) {
       const loVel = Math.max(a.loVel, b.loVel);
       const hiVel = Math.min(a.hiVel, b.hiVel);
       if (lo > hi || loVel > hiVel) continue;
+      if (legato && !canPlayTogether(a, b, lo, hi)) continue;
       overlapping.add(zoneKey(a)).add(zoneKey(b));
       messages.push(
         `${zoneName(a)} and ${zoneName(b)} overlap on ${keys(lo, hi)}, ${velocities(loVel, hiVel)}`,
@@ -226,6 +228,31 @@ function capitalise(text) {
 
 // A mix layer with its own envelope ignores the instrument's envelope knobs
 // (tested in the plugin: the Attack knob changed only the other layer).
+// Whether two legato transitions can both play on some key from lo to hi:
+// on that key, some previous note is allowed by both. A sample allows the
+// notes in its From notes (any if empty), narrowed by its interval to the one
+// note `interval` below the key.
+function canPlayTogether(a, b, lo, hi) {
+  const allowed = (s, key) => {
+    let notes = s.previousNotes.length > 0 ? s.previousNotes : null; // null = any
+    if (Number.isInteger(s.legatoInterval)) {
+      const from = key - s.legatoInterval;
+      notes = notes === null || notes.includes(from) ? [from] : [];
+    }
+    return notes;
+  };
+  for (let key = lo; key <= hi; key++) {
+    const fromA = allowed(a, key);
+    const fromB = allowed(b, key);
+    if (fromA === null || fromB === null) {
+      if ((fromA ?? fromB ?? [0]).length > 0) return true;
+    } else if (fromA.some((n) => fromB.includes(n))) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Legato-only samples with nothing set to "First note only": the normal
 // samples then play on legato notes too, under the transition. That can be
 // deliberate (a tail, as in the docs' example), so it's only a warning.

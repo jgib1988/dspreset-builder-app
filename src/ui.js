@@ -157,17 +157,19 @@ function sectionKey({ effectId, key }) {
 // include the built-in label. `style: null` means the docs' default knob.
 export const CONTROL_STYLES = {
   knob: { label: 'Knob', style: null, width: 70, height: 80 },
+  // The same knob drawn smaller; 50 × 64 is about the smallest whose label
+  // still reads well in the plugin (SizeTest D).
+  small: { label: 'Small knob', style: null, width: 50, height: 64 },
   vertical: { label: 'Vertical slider', style: 'linear_vertical', width: 56, height: 80 },
   horizontal: { label: 'Horizontal slider', style: 'linear_horizontal', width: 130, height: 44 },
 };
 
-// Panel layout, in UI pixels. Three rows of panels fit in the window.
+// Panel layout, in UI pixels.
 const MARGIN = 8; // around and between panels
 const PAD = 6; // inside a panel
 const GAP = 6; // between controls
 const TITLE_HEIGHT = 20;
-const ROW_HEIGHT = 80; // tallest control
-const PANEL_HEIGHT = PAD + TITLE_HEIGHT + ROW_HEIGHT + PAD;
+const ROW_HEIGHT = 80; // row height of a panel without knobs (button or menu only)
 const BUTTON = { width: 50, height: 18 };
 const MENU = { width: 160, height: 26 };
 const SNAP = 8; // dragged panels snap to this grid
@@ -586,7 +588,8 @@ function availableTargets(project) {
 // to right and wrap. After that, panels sit at their saved positions, and a
 // panel without one goes into the first free space that fits it.
 export function layoutControls(project) {
-  // First work out each panel's contents and width.
+  // First work out each panel's contents and size.
+  const uiWidth = project.ui.width;
   const specs = [];
   const owners = [...project.effects, ...project.noteEffects, ...project.modulators];
   const sections = [
@@ -608,15 +611,20 @@ export function layoutControls(project) {
     // Knobs in the order their settings appear, not the order they were added.
     const order = (c) => resolveTarget(project, c)?.order ?? Infinity;
     const knobs = controls.filter((c) => c.kind === 'knob').sort((a, b) => order(a) - order(b));
-    const knobsWidth = knobs.reduce((sum, c) => sum + CONTROL_STYLES[c.style].width, 0) + GAP * Math.max(knobs.length - 1, 0);
+    // Knobs go in one row, or wrap onto more rows when a row would be wider
+    // than the window. Rows are as tall as the panel's tallest control.
+    const rows = wrapKnobs(knobs, uiWidth - MARGIN * 2 - PAD * 2);
+    const rowWidth = (row) => row.reduce((sum, c) => sum + CONTROL_STYLES[c.style].width, 0) + GAP * Math.max(row.length - 1, 0);
+    const knobsWidth = Math.max(0, ...rows.map(rowWidth));
+    const rowHeight = knobs.length > 0 ? Math.max(...knobs.map((c) => CONTROL_STYLES[c.style].height)) : ROW_HEIGHT;
     const titleWidth = title.length * 8 + (button ? BUTTON.width + GAP : 0);
     const width = PAD * 2 + Math.max(knobsWidth, titleWidth, menu ? MENU.width : 0);
-    const height = PANEL_HEIGHT + (menu && knobs.length > 0 ? MENU_ROW : 0);
-    specs.push({ key: section, title, button, menu, knobs, width, height });
+    const rowsHeight = Math.max(rows.length, 1) * rowHeight + GAP * Math.max(rows.length - 1, 0);
+    const height = PAD + TITLE_HEIGHT + (menu && knobs.length > 0 ? MENU_ROW : 0) + rowsHeight + PAD;
+    specs.push({ key: section, title, button, menu, rows, rowHeight, width, height });
   }
 
   // Then where each panel goes.
-  const { width: uiWidth } = project.ui;
   const visibleHeight = keyboardTop(project.ui);
   const positions = project.ui.positions;
   const where = new Map();
@@ -663,7 +671,27 @@ export function layoutControls(project) {
   return { panels, outside, underKeyboard, overlaps };
 }
 
-function placePanel({ key, title, width, height, button, menu, knobs }, { x, y }) {
+// Splits a panel's knobs into rows no wider than `maxWidth` (in order; a
+// knob wider than that still gets a row of its own).
+function wrapKnobs(knobs, maxWidth) {
+  const rows = [];
+  let row = [];
+  let rowWidth = 0;
+  for (const control of knobs) {
+    const w = CONTROL_STYLES[control.style].width;
+    if (row.length > 0 && rowWidth + GAP + w > maxWidth) {
+      rows.push(row);
+      row = [];
+      rowWidth = 0;
+    }
+    rowWidth += (row.length > 0 ? GAP : 0) + w;
+    row.push(control);
+  }
+  if (row.length > 0) rows.push(row);
+  return rows;
+}
+
+function placePanel({ key, title, width, height, button, menu, rows, rowHeight }, { x, y }) {
   const panel = { key, x, y, width, height, title, button: null, menu: null, knobs: [] };
   if (button) {
     panel.button = { control: button, x: x + width - PAD - BUTTON.width, y: y + PAD + 1, ...BUTTON };
@@ -672,14 +700,16 @@ function placePanel({ key, title, width, height, button, menu, knobs }, { x, y }
     // Just under the title.
     panel.menu = { control: menu, x: x + PAD, y: y + PAD + TITLE_HEIGHT + 4, ...MENU };
   }
-  let knobX = x + PAD;
-  for (const control of knobs) {
-    const { width: w, height: h } = CONTROL_STYLES[control.style];
-    // Centre shorter controls (horizontal sliders) in the row.
-    const knobY = y + PAD + TITLE_HEIGHT + (menu ? MENU_ROW : 0) + (ROW_HEIGHT - h) / 2;
-    panel.knobs.push({ control, x: knobX, y: knobY, width: w, height: h });
-    knobX += w + GAP;
-  }
+  rows.forEach((row, i) => {
+    const rowY = y + PAD + TITLE_HEIGHT + (menu ? MENU_ROW : 0) + i * (rowHeight + GAP);
+    let knobX = x + PAD;
+    for (const control of row) {
+      const { width: w, height: h } = CONTROL_STYLES[control.style];
+      // Centre shorter controls (e.g. horizontal sliders) in the row.
+      panel.knobs.push({ control, x: knobX, y: rowY + (rowHeight - h) / 2, width: w, height: h });
+      knobX += w + GAP;
+    }
+  });
   return panel;
 }
 
@@ -1113,8 +1143,10 @@ function drawPreview(svg, project, onDragEnd) {
     }
     for (const k of panel.knobs) {
       const style = k.control.style;
-      if (style === 'knob') {
-        group.append(make('circle', { cx: k.x + k.width / 2, cy: k.y + 46, r: 22, class: 'preview-control' }));
+      if (style === 'knob' || style === 'small') {
+        // Below the label, filling the rest of the control (r 22 for a 70 × 80 knob).
+        const r = Math.min(k.width - 26, k.height - 36) / 2;
+        group.append(make('circle', { cx: k.x + k.width / 2, cy: k.y + 18 + (k.height - 18) / 2, r, class: 'preview-control' }));
       } else if (style === 'vertical') {
         group.append(make('rect', { x: k.x + k.width / 2 - 4, y: k.y + 20, width: 8, height: 56, class: 'preview-control' }));
       } else {

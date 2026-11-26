@@ -42,7 +42,7 @@ import { articulationOf, articulationVolume, getZones, isExportable, isRelease, 
 import { midiToNoteName } from './filename.js';
 import { CURVE_DEFAULTS } from './project.js';
 import { EFFECT_KINDS, NOTE_EFFECTS_TAG, effectTypes, isImpulseResponseFile, visibleParams } from './effects.js';
-import { CONTROL_STYLES, UI_HEIGHT, UI_WIDTH, layoutControls, ownerTitle, resolveTarget } from './ui.js';
+import { CONTROL_STYLES, MIN_UI_HEIGHT, layoutControls, ownerTitle, resolveTarget } from './ui.js';
 import { MODULATOR_KINDS, MOD_BEHAVIORS, canTargetEffects, resolveModTarget, visibleFields } from './modulators.js';
 import { LOOP_MODES, hasTrigger } from './sequences.js';
 import { ARP_DIVISIONS, ARP_NUMBERS, ARP_OCTAVE_MODES, ARP_ORDERS } from './arpeggiator.js';
@@ -405,7 +405,7 @@ function effectElement(effect, project) {
 // element"; bindings: Appendix B). Positions come from layoutControls.
 function uiLines(project) {
   const lines = [
-    `  <ui width="${UI_WIDTH}" height="${UI_HEIGHT}" bgColor="${project.ui.bgColor}">`,
+    `  <ui width="${project.ui.width}" height="${project.ui.height}" bgColor="${project.ui.bgColor}">`,
     '    <tab name="main">',
   ];
   for (const panel of layoutControls(project).panels) {
@@ -1044,10 +1044,14 @@ function checkControls(project) {
     }
   }
   if (project.ui.controls.length > 0) {
-    const { fits, overlaps } = layoutControls(project);
-    if (!fits) {
+    const { width, height } = project.ui;
+    if (!Number.isInteger(width) || width < 1 || !Number.isInteger(height) || height < MIN_UI_HEIGHT) {
+      problems.push(`Controls: the window must be a whole number of pixels wide, and at least ${MIN_UI_HEIGHT} high`);
+    }
+    const { outside, overlaps } = layoutControls(project);
+    for (const panel of outside) {
       problems.push(
-        `Controls don't fit in the ${UI_WIDTH}×${UI_HEIGHT} window: remove some, use narrower styles, or rearrange panels`,
+        `Panel "${panel.title}" runs past the edge of the ${width}×${height} window: drag it inside, make the window bigger, or remove some controls`,
       );
     }
     for (const [a, b] of overlaps) {

@@ -17,9 +17,20 @@ import { articulationLabel, articulationVolume, mixLayerLabel, mixLayerSettings,
 import { MODULATOR_BINDINGS, MODULATOR_KINDS, visibleFields } from './modulators.js';
 import { ARP_NUMBERS, ARP_ORDERS } from './arpeggiator.js';
 
-// The docs' recommended window size.
-export const UI_WIDTH = 812;
-export const UI_HEIGHT = 375;
+// The window size is project.ui.width/height (new projects: the docs'
+// recommended 812 × 375). The plugin never shows the window shorter than 375
+// pixels (tested): a smaller height is just stretched, so it isn't offered.
+export const MIN_UI_HEIGHT = 375;
+
+// The plugin draws its keyboard over the bottom of the interface. At its
+// smallest window it covers everything below y = 215 of a 375-high interface
+// (docs: "Leaving room for the keyboard"; matches SizeTest I). The smallest
+// window always scales the interface to the same height (tested, SizeTest
+// E–H), so the keyboard covers the same share at every height, and the width
+// doesn't change it. Controls below this line can be hidden.
+export function keyboardTop(ui) {
+  return Math.floor((ui.height * 215) / 375);
+}
 
 // Targets with effectId null, in the order they're laid out: the Global
 // panel's, then the Amp envelope panel's. `range` is a new control's
@@ -564,7 +575,9 @@ function availableTargets(project) {
   return groups;
 }
 
-// Places every control. Returns { panels, fits, overlaps }. Each panel has a
+// Places every control. Returns { panels, outside, underKeyboard, overlaps }
+// (outside: panels past the window's edges; underKeyboard: panels reaching
+// below keyboardTop). Each panel has a
 // `key` ('global', 'glide', 'amp', 'articulation', 'mixer', or the effect or modulator id), its
 // title, an optional on/off button (top right), an optional menu, and its
 // knobs/sliders in a row.
@@ -603,6 +616,8 @@ export function layoutControls(project) {
   }
 
   // Then where each panel goes.
+  const { width: uiWidth } = project.ui;
+  const visibleHeight = keyboardTop(project.ui);
   const positions = project.ui.positions;
   const where = new Map();
   if (positions === null) {
@@ -612,7 +627,7 @@ export function layoutControls(project) {
     let y = MARGIN;
     let rowHeight = 0;
     for (const spec of specs) {
-      if (x > MARGIN && x + spec.width > UI_WIDTH - MARGIN) {
+      if (x > MARGIN && x + spec.width > uiWidth - MARGIN) {
         x = MARGIN;
         y += rowHeight + MARGIN;
         rowHeight = 0;
@@ -629,20 +644,23 @@ export function layoutControls(project) {
       placed.push({ ...positions[spec.key], width: spec.width, height: spec.height });
     }
     for (const spec of specs.filter((s) => !positions[s.key])) {
-      const spot = findFreeSpace(placed, spec.width, spec.height) ?? { x: MARGIN, y: MARGIN };
+      const spot = findFreeSpace(placed, spec.width, spec.height, uiWidth, visibleHeight) ?? { x: MARGIN, y: MARGIN };
       where.set(spec, spot);
       placed.push({ ...spot, width: spec.width, height: spec.height });
     }
   }
   const panels = specs.map((spec) => placePanel(spec, where.get(spec)));
 
-  const fits = panels.every((p) => p.x >= 0 && p.y >= 0 && p.x + p.width <= UI_WIDTH && p.y + p.height <= UI_HEIGHT);
+  // Panels running past the window's edges (cut off), and panels reaching
+  // under the keyboard (hidden at the smallest window size).
+  const outside = panels.filter((p) => p.x < 0 || p.y < 0 || p.x + p.width > uiWidth || p.y + p.height > project.ui.height);
+  const underKeyboard = panels.filter((p) => !outside.includes(p) && p.y + p.height > visibleHeight);
   // Pairs of panels that overlap (only possible after dragging).
   const overlaps = [];
   panels.forEach((a, i) => {
     for (const b of panels.slice(i + 1)) if (intersects(a, b, 0)) overlaps.push([a, b]);
   });
-  return { panels, fits, overlaps };
+  return { panels, outside, underKeyboard, overlaps };
 }
 
 function placePanel({ key, title, width, height, button, menu, knobs }, { x, y }) {
@@ -671,10 +689,10 @@ function intersects(a, b, gap) {
 }
 
 // The first spot (top to bottom, left to right, on the snap grid) where a
-// panel of this width fits inside the window without touching the others.
-function findFreeSpace(placed, width, height) {
-  for (let y = MARGIN; y + height <= UI_HEIGHT - MARGIN; y += SNAP) {
-    for (let x = MARGIN; x + width <= UI_WIDTH - MARGIN; x += SNAP) {
+// panel of this size fits above the keyboard without touching the others.
+function findFreeSpace(placed, width, height, uiWidth, visibleHeight) {
+  for (let y = MARGIN; y + height <= visibleHeight - MARGIN; y += SNAP) {
+    for (let x = MARGIN; x + width <= uiWidth - MARGIN; x += SNAP) {
       const spot = { x, y, width, height };
       if (!placed.some((p) => intersects(spot, p, MARGIN))) return { x, y };
     }
@@ -723,7 +741,41 @@ export function renderControlsEditor(container, project, onChange) {
   });
   const colourLabel = document.createElement('label');
   colourLabel.append('Background colour ', colour);
-  colourRow.append(colourLabel);
+
+  // Window size (docs: width and height on <ui>, required; 812 × 375
+  // recommended). Read on Return or click away, since the preview redraws.
+  const sizeInput = (key, min) => {
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = min;
+    input.step = 1;
+    input.className = 'control-input';
+    input.value = project.ui[key];
+    input.addEventListener('change', () => {
+      const value = Number(input.value);
+      if (input.value === '' || !Number.isInteger(value) || value < min) {
+        input.value = project.ui[key];
+        return;
+      }
+      project.ui[key] = value;
+      rerender();
+      onChange();
+    });
+    return input;
+  };
+  const widthLabel = document.createElement('label');
+  widthLabel.className = 'effect-field';
+  widthLabel.append('Width ', sizeInput('width', 1));
+  const heightLabel = document.createElement('label');
+  heightLabel.className = 'effect-field';
+  heightLabel.append('Height ', sizeInput('height', MIN_UI_HEIGHT));
+  colourRow.append(colourLabel, widthLabel, heightLabel);
+  const sizeHint = document.createElement('p');
+  sizeHint.className = 'hint';
+  sizeHint.textContent =
+    'The plugin stretches the whole window to fit when it is resized, so the size sets the window\'s shape and how big ' +
+    'controls look: a wider window gives more room, a taller one makes everything smaller. Height is at least 375 ' +
+    '(the plugin\'s minimum). The keyboard covers the bottom of the window (shaded orange), so keep controls above it.';
 
   const hint = document.createElement('p');
   hint.className = 'hint';
@@ -809,7 +861,7 @@ export function renderControlsEditor(container, project, onChange) {
   resetRow.append(reset);
 
   redrawPreview();
-  container.replaceChildren(colourRow, hint, table, addRow, preview, resetRow);
+  container.replaceChildren(colourRow, sizeHint, hint, table, addRow, preview, resetRow);
 }
 
 // Controls are added automatically (and can then be removed in the list):
@@ -1020,15 +1072,28 @@ function drawPreview(svg, project, onDragEnd) {
     if (text !== undefined) element.textContent = text;
     return element;
   };
-  svg.setAttribute('viewBox', `0 0 ${UI_WIDTH} ${UI_HEIGHT}`);
-  const children = [make('rect', { x: 0, y: 0, width: UI_WIDTH, height: UI_HEIGHT, fill: `#${project.ui.bgColor.slice(2)}` })];
-  const { panels, fits, overlaps } = layoutControls(project);
-  const overlapping = new Set(overlaps.flat());
+  const { width, height } = project.ui;
+  const top = keyboardTop(project.ui);
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.style.maxWidth = `${width}px`;
+  const children = [
+    make('rect', { x: 0, y: 0, width, height, fill: `#${project.ui.bgColor.slice(2)}` }),
+    // Where the plugin's keyboard covers the interface at its smallest size.
+    make('rect', { x: 0, y: top, width, height: height - top, class: 'preview-keyboard' }),
+    make('text', { x: width / 2, y: top + 18, class: 'preview-keyboard-label' }, 'Keyboard covers this at the smallest window size'),
+  ];
+  const { panels, outside, underKeyboard, overlaps } = layoutControls(project);
+  const overlapping = new Set([...overlaps.flat(), ...outside]);
+  const hidden = new Set(underKeyboard);
   for (const panel of panels) {
     // One group per panel, so the whole panel is the drag handle.
     const group = make('g', { class: 'preview-panel-group' });
     group.addEventListener('pointerdown', (event) => startDrag(event, svg, project, panel, onDragEnd));
-    const className = overlapping.has(panel) ? 'preview-panel preview-overlap' : 'preview-panel';
+    const className = overlapping.has(panel)
+      ? 'preview-panel preview-overlap'
+      : hidden.has(panel)
+        ? 'preview-panel preview-under-keyboard'
+        : 'preview-panel';
     group.append(make('rect', { x: panel.x, y: panel.y, width: panel.width, height: panel.height, class: className }));
     group.append(make('text', { x: panel.x + PAD, y: panel.y + PAD + 14, class: 'preview-title' }, panel.title));
     if (panel.button) {
@@ -1059,7 +1124,6 @@ function drawPreview(svg, project, onDragEnd) {
     }
     children.push(group);
   }
-  if (!fits) children.push(make('text', { x: UI_WIDTH / 2, y: UI_HEIGHT - 12, class: 'preview-warning' }, "Controls don't fit"));
   svg.replaceChildren(...children);
 }
 
@@ -1081,8 +1145,8 @@ function startDrag(event, svg, project, panel, onDragEnd) {
   const move = (e) => {
     const now = toUi(e);
     project.ui.positions[panel.key] = {
-      x: clamp(Math.round((origin.x + now.x - start.x) / SNAP) * SNAP, UI_WIDTH - panel.width),
-      y: clamp(Math.round((origin.y + now.y - start.y) / SNAP) * SNAP, UI_HEIGHT - panel.height),
+      x: clamp(Math.round((origin.x + now.x - start.x) / SNAP) * SNAP, project.ui.width - panel.width),
+      y: clamp(Math.round((origin.y + now.y - start.y) / SNAP) * SNAP, project.ui.height - panel.height),
     };
     drawPreview(svg, project, onDragEnd);
   };

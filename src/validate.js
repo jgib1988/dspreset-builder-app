@@ -5,6 +5,7 @@
 
 import { getZones, isExportable, legatoTrigger, mappingSet, mixLayerSettings, sampleKind, usedArticulations, usedMixLayers, zoneKey } from './mapping.js';
 import { midiToNoteName } from './filename.js';
+import { layoutControls } from './ui.js';
 
 // Returns { messages, overlapping }, where `overlapping` is the set of zone
 // keys that overlap another zone (the grid outlines them).
@@ -34,6 +35,7 @@ export function findWarnings(project) {
     ...findLegatoWarnings(project),
     ...findReturnWarnings(project),
     ...findSmoothLegatoWarnings(project),
+    ...findKeyboardWarnings(project),
     ...(project.arpeggiator.included && project.sequences.length > 0
       ? ['While the arpeggiator is on, sequence notes go through it and are arpeggiated, not played as written']
       : []),
@@ -235,6 +237,16 @@ function capitalise(text) {
 function findReturnWarnings(project) {
   if (!project.returnToHeldNote || cutsNotesOff(project)) return [];
   return ['Return to held note does nothing here: tick Monophonic (Sound tab) or set up Choking so notes cut each other off'];
+}
+
+// Panels reaching under the plugin's keyboard can be hidden at its smallest
+// window size (docs: "Leaving room for the keyboard"). Larger windows show
+// them, so this doesn't block the export.
+function findKeyboardWarnings(project) {
+  if (project.ui.controls.length === 0) return [];
+  return layoutControls(project).underKeyboard.map(
+    (panel) => `Panel "${panel.title}" reaches under the plugin's keyboard, so it is hidden when the window is small: drag it up, make the window wider, or remove some controls`,
+  );
 }
 
 // Smooth legato (glideRetrigger) also needs a glide (docs; tested in the plugin).

@@ -76,7 +76,8 @@ export function createProject(folderName) {
     // pan) and Amp envelope controls.
     // positions: null for the automatic layout, or each panel's dragged
     // position, keyed 'global', 'amp' or the effect id, e.g. { amp: { x: 8, y: 8 } }.
-    ui: { bgColor: 'FF2A2A2A', controls: [], positions: null },
+    // width and height: the window size in UI pixels (docs: <ui width height>).
+    ui: { bgColor: 'FF2A2A2A', width: 812, height: 375, controls: [], positions: null },
     // Sample names whose samples play when a key is released (docs: trigger
     // "release"), e.g. ['PianoRel']. They're exported in their own groups.
     releaseNames: [],

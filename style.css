@@ -237,7 +237,6 @@ td.muted {
 .ui-preview {
   display: block;
   width: 100%;
-  max-width: 812px;
   height: auto;
   border: 1px solid #ccc;
 }
@@ -500,4 +499,21 @@ details.fold[open] > summary::before {
 /* A mix layer's pan, tuning and envelope, under its volume box. */
 .mixlayer-settings {
   margin: -0.6rem 0 1rem 1.5rem;
+}
+
+/* Where the plugin's keyboard covers the window (ui.js, keyboardTop) */
+.preview-keyboard {
+  fill: #e67e00;
+  fill-opacity: 0.25;
+}
+
+.preview-keyboard-label {
+  fill: #e67e00;
+  font-size: 13px;
+  text-anchor: middle;
+}
+
+.preview-under-keyboard {
+  stroke: #e67e00;
+  stroke-width: 2;
 }

@@ -32,6 +32,7 @@ export function findWarnings(project) {
     ...findSequenceWarnings(project, zones),
     ...findOwnEnvelopeWarnings(project),
     ...findLegatoWarnings(project),
+    ...findReturnWarnings(project),
     ...(project.arpeggiator.included && project.sequences.length > 0
       ? ['While the arpeggiator is on, sequence notes go through it and are arpeggiated, not played as written']
       : []),
@@ -228,6 +229,15 @@ function capitalise(text) {
 
 // A mix layer with its own envelope ignores the instrument's envelope knobs
 // (tested in the plugin: the Attack knob changed only the other layer).
+// Return to held note only works when notes cut each other off: Monophonic
+// (or a Mono/Poly button), or choke tags (docs; tested in the plugin).
+function findReturnWarnings(project) {
+  if (!project.returnToHeldNote || project.monophonic) return [];
+  if (project.ui.controls.some((c) => c.effectId === null && c.key === 'monophonic')) return [];
+  if (Object.values(project.chokedBy ?? {}).some((names) => names.length > 0)) return [];
+  return ['Return to held note does nothing here: tick Monophonic (Sound tab) or set up Choking so notes cut each other off'];
+}
+
 // Whether two legato transitions can both play on some key from lo to hi:
 // on that key, some previous note is allowed by both. A sample allows the
 // notes in its From notes (any if empty), narrowed by its interval to the one

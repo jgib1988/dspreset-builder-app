@@ -1,6 +1,7 @@
 // The Global section: instrument-wide settings on <groups> (docs: "The
 // <groups> element"): volume, velocity tracking, tuning, pan and glide, and
-// whether the instrument is monophonic (docs: tag polyphony).
+// whether the instrument is monophonic (docs: tag polyphony) and returns to
+// a held note (docs: returnToHeldNote).
 // Checks on the values happen in export.js (checkPreset).
 
 // `blank` (optional) is what an empty field means, shown as a placeholder.
@@ -79,5 +80,21 @@ export function renderGlobalEditor(container, project, onChange) {
   monoLabel.append(mono, ' Monophonic: one note at a time (each mix layer on its own). Glide sounds best with this on.');
   monoRow.append(monoLabel);
 
-  container.replaceChildren(...rows, modeRow, monoRow);
+  const back = document.createElement('input');
+  back.type = 'checkbox';
+  back.checked = project.returnToHeldNote;
+  back.addEventListener('change', () => {
+    project.returnToHeldNote = back.checked;
+    onChange();
+  });
+  const backRow = document.createElement('p');
+  const backLabel = document.createElement('label');
+  backLabel.append(
+    back,
+    ' Return to held note: releasing a key plays a key you are still holding again, like a mono synth ' +
+      '(needs Monophonic or Choking; Decent Sampler 1.41 or later)',
+  );
+  backRow.append(backLabel);
+
+  container.replaceChildren(...rows, modeRow, monoRow, backRow);
 }

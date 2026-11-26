@@ -629,6 +629,7 @@ function groupsAttributes(project, usesRoundRobin) {
   if (project.glideTime !== 0) attributes += ` glideTime="${project.glideTime}"`;
   // 'legato' is the docs' default, so only 'always' is written.
   if (project.glideMode !== 'legato') attributes += ` glideMode="${project.glideMode}"`;
+  if (project.returnToHeldNote) attributes += ' returnToHeldNote="true"';
   const envelope = project.envelope;
   if (envelope.enabled) {
     attributes +=

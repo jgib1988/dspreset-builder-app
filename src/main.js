@@ -105,6 +105,7 @@ pickButton.addEventListener('click', async () => {
     project.glideTime = previous.glideTime;
     project.glideMode = previous.glideMode;
     project.monophonic = previous.monophonic;
+    project.returnToHeldNote = previous.returnToHeldNote;
     project.releaseNames = previous.releaseNames;
     project.releaseDecay = previous.releaseDecay;
     project.releaseIgnoresEnvelope = previous.releaseIgnoresEnvelope;

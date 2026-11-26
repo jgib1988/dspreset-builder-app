@@ -31,6 +31,10 @@ export function createProject(folderName) {
     // One voice at a time (docs: polyphony="1" on a <tag>). Each mix layer is
     // monophonic on its own; release samples are left out.
     monophonic: false,
+    // In a monophonic instrument, releasing the sounding key plays a key
+    // that's still held again, like a mono synth (docs: returnToHeldNote on
+    // <groups>, Decent Sampler 1.41; tested in the plugin).
+    returnToHeldNote: false,
     // One amp envelope for the whole instrument (docs: attack, decay, sustain,
     // release on <groups>). Only exported when `enabled` is true. Times in
     // seconds, sustain 0–1. These names are what UI controls will bind to.

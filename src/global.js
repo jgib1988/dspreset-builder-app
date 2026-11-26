@@ -1,7 +1,7 @@
 // The Global section: instrument-wide settings on <groups> (docs: "The
 // <groups> element"): volume, velocity tracking, tuning, pan and glide, and
 // whether the instrument is monophonic (docs: tag polyphony) and returns to
-// a held note (docs: returnToHeldNote).
+// a held note (docs: returnToHeldNote) and glides smoothly (docs: glideRetrigger).
 // Checks on the values happen in export.js (checkPreset).
 
 // `blank` (optional) is what an empty field means, shown as a placeholder.
@@ -96,5 +96,21 @@ export function renderGlobalEditor(container, project, onChange) {
   );
   backRow.append(backLabel);
 
-  container.replaceChildren(...rows, modeRow, monoRow, backRow);
+  const smooth = document.createElement('input');
+  smooth.type = 'checkbox';
+  smooth.checked = project.smoothLegato;
+  smooth.addEventListener('change', () => {
+    project.smoothLegato = smooth.checked;
+    onChange();
+  });
+  const smoothRow = document.createElement('p');
+  const smoothLabel = document.createElement('label');
+  smoothLabel.append(
+    smooth,
+    ' Smooth legato: gliding to a new key carries on the note instead of restarting it ' +
+      '(needs Monophonic or Choking, and a glide time; Decent Sampler 1.41 or later)',
+  );
+  smoothRow.append(smoothLabel);
+
+  container.replaceChildren(...rows, modeRow, monoRow, backRow, smoothRow);
 }

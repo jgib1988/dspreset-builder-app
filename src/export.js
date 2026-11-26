@@ -630,6 +630,7 @@ function groupsAttributes(project, usesRoundRobin) {
   // 'legato' is the docs' default, so only 'always' is written.
   if (project.glideMode !== 'legato') attributes += ` glideMode="${project.glideMode}"`;
   if (project.returnToHeldNote) attributes += ' returnToHeldNote="true"';
+  if (project.smoothLegato) attributes += ' glideRetrigger="false"';
   const envelope = project.envelope;
   if (envelope.enabled) {
     attributes +=

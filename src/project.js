@@ -35,6 +35,11 @@ export function createProject(folderName) {
     // that's still held again, like a mono synth (docs: returnToHeldNote on
     // <groups>, Decent Sampler 1.41; tested in the plugin).
     returnToHeldNote: false,
+    // In a monophonic instrument with glide, a legato glide carries on the
+    // sounding note instead of starting it again (docs: glideRetrigger="false"
+    // on <groups>, Decent Sampler 1.41; tested in the plugin). false = the
+    // docs' default (restart), which isn't written.
+    smoothLegato: false,
     // One amp envelope for the whole instrument (docs: attack, decay, sustain,
     // release on <groups>). Only exported when `enabled` is true. Times in
     // seconds, sustain 0–1. These names are what UI controls will bind to.

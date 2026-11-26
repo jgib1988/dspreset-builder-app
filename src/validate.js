@@ -33,6 +33,7 @@ export function findWarnings(project) {
     ...findOwnEnvelopeWarnings(project),
     ...findLegatoWarnings(project),
     ...findReturnWarnings(project),
+    ...findSmoothLegatoWarnings(project),
     ...(project.arpeggiator.included && project.sequences.length > 0
       ? ['While the arpeggiator is on, sequence notes go through it and are arpeggiated, not played as written']
       : []),
@@ -232,10 +233,25 @@ function capitalise(text) {
 // Return to held note only works when notes cut each other off: Monophonic
 // (or a Mono/Poly button), or choke tags (docs; tested in the plugin).
 function findReturnWarnings(project) {
-  if (!project.returnToHeldNote || project.monophonic) return [];
-  if (project.ui.controls.some((c) => c.effectId === null && c.key === 'monophonic')) return [];
-  if (Object.values(project.chokedBy ?? {}).some((names) => names.length > 0)) return [];
+  if (!project.returnToHeldNote || cutsNotesOff(project)) return [];
   return ['Return to held note does nothing here: tick Monophonic (Sound tab) or set up Choking so notes cut each other off'];
+}
+
+// Smooth legato (glideRetrigger) also needs a glide (docs; tested in the plugin).
+function findSmoothLegatoWarnings(project) {
+  if (!project.smoothLegato) return [];
+  if (!cutsNotesOff(project)) {
+    return ['Smooth legato does nothing here: tick Monophonic (Sound tab) or set up Choking so notes cut each other off'];
+  }
+  if (!(project.glideTime > 0)) return ['Smooth legato does nothing without a glide: set a Glide time (Sound tab)'];
+  return [];
+}
+
+// Whether notes cut each other off: Monophonic, a Mono/Poly button, or choke tags.
+function cutsNotesOff(project) {
+  if (project.monophonic) return true;
+  if (project.ui.controls.some((c) => c.effectId === null && c.key === 'monophonic')) return true;
+  return Object.values(project.chokedBy ?? {}).some((names) => names.length > 0);
 }
 
 // Whether two legato transitions can both play on some key from lo to hi:

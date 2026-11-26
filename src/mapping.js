@@ -13,6 +13,20 @@ export function isRelease(project, sample) {
   return (project.releaseNames ?? []).includes(sample.name);
 }
 
+// The sample's legato trigger: 'first' (only when no other note is held),
+// 'legato' (only when one is), or null (every note). Release samples have none.
+export function legatoTrigger(project, sample) {
+  if (isRelease(project, sample)) return null;
+  return project.legatoTriggers?.[sample.name] ?? null;
+}
+
+// Which mapping the sample belongs to: 'release' (key up), 'legato' (legato
+// transitions, which share keys with the normal samples) or 'normal'.
+export function sampleKind(project, sample) {
+  if (isRelease(project, sample)) return 'release';
+  return legatoTrigger(project, sample) === 'legato' ? 'legato' : 'normal';
+}
+
 // The sample's articulation number (key switching), or 0 for none.
 export function articulationOf(project, sample) {
   return project.articulations?.[sample.name] ?? 0;
@@ -68,10 +82,10 @@ export function mixLayerLabel(project, mixLayer) {
   return [...new Set(names)].sort().join(' / ');
 }
 
-// Samples that are mapped together: the same articulation and mix layer, and
-// both normal or both release. Different sets normally cover the same keys on purpose.
+// Samples that are mapped together: the same articulation, mix layer and kind
+// (normal, legato or release). Different sets normally cover the same keys on purpose.
 export function mappingSet(project, sample) {
-  return `${articulationOf(project, sample)}|${mixLayerOf(project, sample)}|${isRelease(project, sample)}`;
+  return `${articulationOf(project, sample)}|${mixLayerOf(project, sample)}|${sampleKind(project, sample)}`;
 }
 
 // A "zone" is a set of round-robin variations of one sound: samples with the

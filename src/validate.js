@@ -3,16 +3,17 @@
 // checkPreset). Zones with invalid ranges are skipped here; checkPreset
 // already reports them.
 
-import { getZones, isExportable, isRelease, mappingSet, mixLayerSettings, usedArticulations, usedMixLayers, zoneKey } from './mapping.js';
+import { getZones, isExportable, legatoTrigger, mappingSet, mixLayerSettings, sampleKind, usedArticulations, usedMixLayers, zoneKey } from './mapping.js';
 import { midiToNoteName } from './filename.js';
 
 // Returns { messages, overlapping }, where `overlapping` is the set of zone
 // keys that overlap another zone (the grid outlines them).
 export function findWarnings(project) {
   const zones = getZones(project).filter((zone) => hasValidRanges(zone[0]));
-  // Release samples, other articulations and mix layers are meant to share keys, so
-  // overlaps are only looked for within each mapping set, and gaps only
-  // within each set of normal samples.
+  // Release and legato samples, other articulations and mix layers are meant to
+  // share keys, so overlaps are only looked for within each mapping set, and
+  // gaps only within each set of normal samples (transitions may cover only
+  // some keys).
   const sets = new Map();
   for (const zone of zones) {
     const key = mappingSet(project, zone[0]);
@@ -22,7 +23,7 @@ export function findWarnings(project) {
   const overlapping = new Set();
   const messages = [
     ...[...sets.values()].flatMap((set) => findOverlaps(set, overlapping)),
-    ...[...sets.values()].filter((set) => !isRelease(project, set[0][0])).flatMap(findGaps),
+    ...[...sets.values()].filter((set) => sampleKind(project, set[0][0]) === 'normal').flatMap(findGaps),
     ...findKeyswitchesOnZones(project, zones),
     ...project.modulators.filter((m) => m.targets.length === 0).map((m) => `Modulator ${m.id} has no targets, so it does nothing`),
     ...findDuplicateRoundRobins(project),
@@ -30,6 +31,7 @@ export function findWarnings(project) {
     ...findMixedFormats(project),
     ...findSequenceWarnings(project, zones),
     ...findOwnEnvelopeWarnings(project),
+    ...findLegatoWarnings(project),
     ...(project.arpeggiator.included && project.sequences.length > 0
       ? ['While the arpeggiator is on, sequence notes go through it and are arpeggiated, not played as written']
       : []),
@@ -224,6 +226,15 @@ function capitalise(text) {
 
 // A mix layer with its own envelope ignores the instrument's envelope knobs
 // (tested in the plugin: the Attack knob changed only the other layer).
+// Legato-only samples with nothing set to "First note only": the normal
+// samples then play on legato notes too, under the transition. That can be
+// deliberate (a tail, as in the docs' example), so it's only a warning.
+function findLegatoWarnings(project) {
+  const triggers = new Set(project.samples.filter(isExportable).map((s) => legatoTrigger(project, s)));
+  if (!triggers.has('legato') || triggers.has('first')) return [];
+  return ['There are "Legato only" samples but none set to "First note only", so the normal samples also play on legato notes, under the transition'];
+}
+
 const ENVELOPE_KEYS = ['attack', 'decay', 'sustain', 'release'];
 function findOwnEnvelopeWarnings(project) {
   const hasKnobs = project.ui.controls.some((c) => c.effectId === null && ENVELOPE_KEYS.includes(c.key));

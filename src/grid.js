@@ -10,11 +10,11 @@
 // Drawn as SVG: every zone is a real element the browser can click and drag,
 // and it scales to the page width via the viewBox.
 //
-// Release samples, other articulations and mix layers cover the same keys as
+// Release and legato samples, other articulations and mix layers cover the same keys as
 // the normal ones, so the grid shows one articulation, mix layer and kind at a
 // time, picked above it.
 
-import { articulationOf, getZones, isRelease, mixLayerLabel, mixLayerOf, zoneKey } from './mapping.js';
+import { articulationOf, getZones, mixLayerLabel, mixLayerOf, sampleKind, zoneKey } from './mapping.js';
 import { midiToNoteName } from './filename.js';
 import { renderLoopEditor } from './loops.js';
 import { renderLevelEditor } from './levels.js';
@@ -40,9 +40,9 @@ const LAYER_COLORS = ['#4e79a7', '#f28e2b', '#59a14f', '#e15759', '#b07aa1', '#7
 // state, so it isn't in the project data.
 const selectedKeys = new Set();
 
-// Whether the grid shows release samples (true) or normal ones, and which
-// articulation and mix layer (0 = none). Screen-only.
-let showRelease = false;
+// Which kind of samples the grid shows ('normal', 'legato' or 'release'; see
+// sampleKind), and which articulation and mix layer (0 = none). Screen-only.
+let showKind = 'normal';
 let showArticulation = 0;
 let showMixLayer = 0;
 
@@ -52,15 +52,15 @@ let showMixLayer = 0;
 // Trim and loop box isn't interrupted by a full redraw.
 export function renderGrid(container, details, project, onChange, onLoopChange) {
   const allZones = getZones(project);
-  const hasRelease = allZones.some((zone) => isRelease(project, zone[0]));
-  if (!hasRelease) showRelease = false;
+  const kinds = KINDS.filter(([kind]) => kind === 'normal' || allZones.some((zone) => sampleKind(project, zone[0]) === kind));
+  if (!kinds.some(([kind]) => kind === showKind)) showKind = 'normal';
   const articulations = [...new Set(allZones.map((zone) => articulationOf(project, zone[0])))].sort((a, b) => a - b);
   if (!articulations.includes(showArticulation)) showArticulation = articulations[0] ?? 0;
   const mixLayers = [...new Set(allZones.map((zone) => mixLayerOf(project, zone[0])))].sort((a, b) => a - b);
   if (!mixLayers.includes(showMixLayer)) showMixLayer = mixLayers[0] ?? 0;
   const zones = allZones.filter(
     (zone) =>
-      isRelease(project, zone[0]) === showRelease &&
+      sampleKind(project, zone[0]) === showKind &&
       articulationOf(project, zone[0]) === showArticulation &&
       mixLayerOf(project, zone[0]) === showMixLayer,
   );
@@ -105,7 +105,7 @@ export function renderGrid(container, details, project, onChange, onLoopChange) 
   const pickers = [];
   if (articulations.length > 1) pickers.push(articulationPicker(project, articulations, redraw));
   if (mixLayers.length > 1) pickers.push(mixLayerPicker(project, mixLayers, redraw));
-  if (hasRelease) pickers.push(kindPicker(redraw));
+  if (kinds.length > 1) pickers.push(kindPicker(kinds, redraw));
   pickers.push(selectionBar(zones, redraw));
   container.replaceChildren(...pickers, svg);
   renderDetails(
@@ -183,19 +183,26 @@ function mixLayerPicker(project, mixLayers, redraw) {
   return bar;
 }
 
-// Two radio buttons: show the normal samples or the release samples.
-function kindPicker(redraw) {
+// The kinds of samples, each mapped on its own, with the picker's text.
+const KINDS = [
+  ['normal', 'Key down (normal samples)'],
+  ['legato', 'Legato (transition samples)'],
+  ['release', 'Key up (release samples)'],
+];
+
+// Radio buttons: show the normal, legato or release samples (only kinds in use).
+function kindPicker(kinds, redraw) {
   const bar = document.createElement('p');
   bar.className = 'grid-kind';
   bar.append('Show: ');
-  for (const [release, text] of [[false, 'Key down (normal samples)'], [true, 'Key up (release samples)']]) {
+  for (const [kind, text] of kinds) {
     const label = document.createElement('label');
     const radio = document.createElement('input');
     radio.type = 'radio';
     radio.name = 'grid-kind';
-    radio.checked = showRelease === release;
+    radio.checked = showKind === kind;
     radio.addEventListener('change', () => {
-      showRelease = release;
+      showKind = kind;
       selectedKeys.clear();
       redraw();
     });

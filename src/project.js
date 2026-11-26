@@ -111,6 +111,11 @@ export function createProject(folderName) {
     // decay, sustain, release on <group>). Missing means the defaults in
     // mapping.js (mixLayerSettings): nothing is written.
     mixLayerSettings: {},
+    // Legato triggers by sample name (docs: trigger on <group>), e.g.
+    // { Sustain: 'first', Slur: 'legato' }: 'first' plays only when no other
+    // note is held, 'legato' only when one is. Names without one play on
+    // every note. Release samples ignore it.
+    legatoTriggers: {},
     samples: [],
   };
 }

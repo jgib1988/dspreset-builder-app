@@ -38,7 +38,7 @@
 // their layer, so the voice limit can't go on that). With a Mono/Poly button
 // the tags are always written; the button sets TAG_POLYPHONY to 1 or -1.
 
-import { articulationOf, articulationVolume, getZones, isExportable, isRelease, mixLayerOf, mixLayerSettings, mixLayerVolume, usedArticulations, usedMixLayers } from './mapping.js';
+import { articulationOf, articulationVolume, getZones, isExportable, isRelease, legatoTrigger, mixLayerOf, mixLayerSettings, mixLayerVolume, usedArticulations, usedMixLayers } from './mapping.js';
 import { midiToNoteName } from './filename.js';
 import { CURVE_DEFAULTS } from './project.js';
 import { EFFECT_KINDS, NOTE_EFFECTS_TAG, effectTypes, isImpulseResponseFile, visibleParams } from './effects.js';
@@ -146,31 +146,36 @@ function presetGroups(project) {
     ' trigger="release"' +
     (project.releaseDecay !== null ? ` releaseTriggerDecay="${project.releaseDecay}dB"` : '') +
     (project.releaseIgnoresEnvelope ? ' ampEnvEnabled="false"' : '');
-  // Normal groups, then release groups; within each, no articulation first,
-  // then articulations in order, and within those, no mix layer first, then
-  // mix layers in order.
+  // Normal groups (every note, then "first" and "legato" triggers), then
+  // release groups; within each, no articulation first, then articulations
+  // in order, and within those, no mix layer first, then mix layers in order.
   const zones = getZones(project);
+  const triggerOf = (sample) => (isRelease(project, sample) ? 'release' : legatoTrigger(project, sample) ?? 'attack');
   const groups = [];
-  for (const release of [false, true]) {
+  for (const trigger of ['attack', 'first', 'legato', 'release']) {
+    const release = trigger === 'release';
+    // docs: trigger="first" / "legato" on <group> (tested in the plugin).
+    const legato = trigger === 'first' || trigger === 'legato';
     for (const articulation of [0, ...usedArticulations(project)]) {
       for (const mixLayer of [0, ...usedMixLayers(project)]) {
         const inSet = zones.filter(
           (zone) =>
-            isRelease(project, zone[0]) === release &&
+            triggerOf(zone[0]) === trigger &&
             articulationOf(project, zone[0]) === articulation &&
             mixLayerOf(project, zone[0]) === mixLayer,
         );
-        // e.g. names "v1 art2 mix1 release", tags "art2,mix1".
+        // e.g. names "v1 art2 mix1 release" or "v1 legato", tags "art2,mix1".
         const tags = [];
         if (articulation > 0) tags.push(`art${articulation}`);
         if (mixLayer > 0) tags.push(`mix${mixLayer}`);
         if (usesMonoTags(project) && !release) tags.push(monoTag(mixLayer));
-        const suffix = tags.map((tag) => ` ${tag}`).join('') + (release ? ' release' : '');
+        const suffix = tags.map((tag) => ` ${tag}`).join('') + (trigger === 'attack' ? '' : ` ${trigger}`);
         // Every group also gets the per-note effects tag, which their controls target.
         const groupTags = project.noteEffects.length > 0 ? [...tags, NOTE_EFFECTS_TAG] : tags;
         const attributes =
           (groupTags.length > 0 ? ` tags="${groupTags.join(',')}"` : '') +
           (release ? releaseAttributes : '') +
+          (legato ? ` trigger="${trigger}"` : '') +
           (mixLayer > 0 ? mixLayerAttributes(project, mixLayer, release) : '');
         groups.push(...layerGroups(inSet, suffix, attributes).map((group) => ({ ...group, release, mixLayer })));
       }

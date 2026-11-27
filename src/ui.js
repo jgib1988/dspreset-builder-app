@@ -891,7 +891,23 @@ export function renderControlsEditor(container, project, onChange) {
   resetRow.append(reset);
 
   redrawPreview();
-  container.replaceChildren(colourRow, sizeHint, hint, table, addRow, preview, resetRow);
+  // Set every knob and slider to one style at once (buttons and menus have
+  // no style). Each control's own menu can change it back afterwards.
+  const styleRow = document.createElement('p');
+  const allStyle = document.createElement('select');
+  for (const [value, { label: text }] of Object.entries(CONTROL_STYLES)) allStyle.append(new Option(text, value));
+  allStyle.value = 'small';
+  const applyStyle = document.createElement('button');
+  applyStyle.textContent = 'Apply';
+  applyStyle.disabled = !controls.some((c) => c.kind === 'knob');
+  applyStyle.addEventListener('click', () => {
+    for (const control of controls) if (control.kind === 'knob') control.style = allStyle.value;
+    rerender(); // the layout changes
+    onChange();
+  });
+  styleRow.append('Set all knobs and sliders to: ', allStyle, ' ', applyStyle);
+
+  container.replaceChildren(colourRow, sizeHint, hint, table, addRow, styleRow, preview, resetRow);
 }
 
 // Controls are added automatically (and can then be removed in the list):

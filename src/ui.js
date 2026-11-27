@@ -23,13 +23,13 @@ import { ARP_NUMBERS, ARP_ORDERS } from './arpeggiator.js';
 export const MIN_UI_HEIGHT = 375;
 
 // The plugin draws its keyboard over the bottom of the interface. At its
-// smallest window it covers everything below y = 215 of a 375-high interface
-// (docs: "Leaving room for the keyboard"; matches SizeTest I). The smallest
-// window always scales the interface to the same height (tested, SizeTest
-// E–H), so the keyboard covers the same share at every height, and the width
-// doesn't change it. Controls below this line can be hidden.
+// smallest window it covers the bottom 160 pixels, whatever the height or
+// width (docs: everything below y = 215 of a 375-high interface; tested at
+// 375, 400 and 600 high with SizeTest O–Q). Controls below this line can be
+// hidden.
+export const KEYBOARD_HEIGHT = 160;
 export function keyboardTop(ui) {
-  return Math.floor((ui.height * 215) / 375);
+  return ui.height - KEYBOARD_HEIGHT;
 }
 
 // Targets with effectId null, in the order they're laid out: the Global
@@ -803,9 +803,8 @@ export function renderControlsEditor(container, project, onChange) {
   const sizeHint = document.createElement('p');
   sizeHint.className = 'hint';
   sizeHint.textContent =
-    'The plugin stretches the whole window to fit when it is resized, so the size sets the window\'s shape and how big ' +
-    'controls look: a wider window gives more room, a taller one makes everything smaller. Height is at least 375 ' +
-    '(the plugin\'s minimum). The keyboard covers the bottom of the window (shaded orange), so keep controls above it.';
+    'A bigger window gives more room for controls. Height is at least 375 (the plugin\'s minimum). The plugin\'s ' +
+    'keyboard always covers the bottom 160 pixels (shaded orange), so keep controls above it.';
 
   const hint = document.createElement('p');
   hint.className = 'hint';
@@ -1121,12 +1120,17 @@ function drawPreview(svg, project, onDragEnd) {
   const { width, height } = project.ui;
   const top = keyboardTop(project.ui);
   svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
-  svg.style.maxWidth = `${width}px`;
+  // Drawn at the same scale whatever the size, like the plugin (its keyboard
+  // is always the same size): a wider or taller window makes the preview
+  // wider or taller. On a page narrower than 812 pixels every preview is
+  // scaled down by the same amount, as if the standard 812 × 375 window were
+  // squeezed to fit (a window wider than the page is shrunk to fit it).
+  svg.style.width = `calc(min(100%, 812px) * ${width / 812})`;
   const children = [
     make('rect', { x: 0, y: 0, width, height, fill: `#${project.ui.bgColor.slice(2)}` }),
     // Where the plugin's keyboard covers the interface at its smallest size.
     make('rect', { x: 0, y: top, width, height: height - top, class: 'preview-keyboard' }),
-    make('text', { x: width / 2, y: top + 18, class: 'preview-keyboard-label' }, 'Keyboard covers this at the smallest window size'),
+    make('text', { x: width / 2, y: top + 18, class: 'preview-keyboard-label' }, "The plugin's keyboard covers this"),
   ];
   const { panels, outside, underKeyboard, overlaps } = layoutControls(project);
   const overlapping = new Set([...overlaps.flat(), ...outside]);
